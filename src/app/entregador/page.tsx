@@ -16,10 +16,10 @@ function Cartao({ e, meu }: { e: typeof E.$inferSelect; meu?: boolean }) {
       <Link href={`/entregador/f/${e.id}`} className="card flex items-center gap-3 active:scale-[.99]">
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{e.destino}{e.uf ? `/${e.uf}` : ""}</p>
-          <p className="text-xs text-graphite">{[e.distanciaKm ? `${Math.round(e.distanciaKm)} km` : null, e.kg ? `${e.kg.toLocaleString("pt-BR")} kg` : null, e.veiculo, `coleta ${dia(e.coletaEm)}`].filter(Boolean).join(" · ")}</p>
+          <p className="text-xs text-graphite">{[e.distanciaKm ? `${Math.round(e.distanciaKm)} km` : null, e.kg ? `${e.kg.toLocaleString("pt-BR")} kg` : null, e.veiculo, e.descarga === "ajudante" ? `com ${e.ajudantes} ajudante(s)` : e.descarga === "motorista" ? "motorista descarrega" : null, `coleta ${dia(e.coletaEm)}`].filter(Boolean).join(" · ")}</p>
           {meu && <p className="text-xs font-semibold text-brand-text mt-1">{STATUS[e.status].rotulo}</p>}
         </div>
-        <span className="font-bold text-lg">{reais(e.valor)}</span>
+        <span className="font-bold text-lg">{reais(e.valor + e.valorDescarga)}</span>
       </Link>
     </li>
   );
@@ -54,7 +54,7 @@ export default async function Inicio() {
         <details className="card">
           <summary className="font-semibold cursor-pointer min-h-[40px] flex items-center">Últimas entregas ({feitos.length})</summary>
           <ul className="mt-2 flex flex-col gap-1 text-sm">{feitos.map((e) => (
-            <li key={e.id} className="flex justify-between"><span>{e.entregueEm?.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} · {e.destino}</span><strong>{reais(e.valor)}</strong></li>
+            <li key={e.id} className="flex justify-between"><span>{e.entregueEm?.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} · {e.destino}</span><strong>{reais(e.valor + e.valorDescarga)}</strong></li>
           ))}</ul>
         </details>
       )}

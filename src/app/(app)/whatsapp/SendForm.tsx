@@ -18,7 +18,7 @@ function Enviar({ disabled }: { disabled?: boolean }) {
 
 const fmtSeg = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-export default function SendForm({ chat, numero }: { chat?: string; numero?: string }) {
+export default function SendForm({ chat, numero, conexao, conexoes, padrao }: { chat?: string; numero?: string; conexao?: string; conexoes?: { id: string; nome: string }[]; padrao?: string }) {
   const [state, action] = useFormState(enviar, undefined);
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -79,6 +79,13 @@ export default function SendForm({ chat, numero }: { chat?: string; numero?: str
 
   return (
     <form ref={form} action={action} className="flex flex-col gap-2">
+      {conexao && <input type="hidden" name="conexao" value={conexao} />}
+      {!chat && conexoes && (conexoes.length > 1 ? (
+        <div>
+          <label htmlFor="wa-cx" className="label">Enviar pelo número de</label>
+          <select id="wa-cx" name="conexao" defaultValue={padrao} className="input">{conexoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+        </div>
+      ) : <input type="hidden" name="conexao" value={conexoes[0]?.id ?? ""} />)}
       {chat ? <input type="hidden" name="chat" value={chat} /> : (
         <div>
           <label htmlFor="wa-num" className="label">Número (com DDD)</label>

@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
             if (d.buffer.length <= MAX_MIDIA) midia = await paraOuvir({ buffer: d.buffer, mime: info.mime_type ?? d.mime, nome: info.filename ?? null, tipo });
           } catch (e) { console.error("mídia oficial:", e instanceof Error ? e.message : e); }
         }
-        await handleIncoming({ id: `of_${m.id}`, chat: m.from, channel: "oficial", fromMe: false, name: names[m.from] ?? null, text, midia,
+        await handleIncoming({ conexaoId: "oficial", id: `of_${m.id}`, chat: m.from, channel: "oficial", fromMe: false, name: names[m.from] ?? null, text, midia,
           midiaFalhou: tipo && !midia ? { tipo, nome: info?.filename ?? null } : undefined });
       }
     }

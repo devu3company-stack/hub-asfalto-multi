@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "FINANCEIRO" | "COMERCIAL" | "ATENDIMENTO";
+export type Role = "ADMIN" | "FINANCEIRO" | "COMERCIAL" | "ATENDIMENTO" | "LOGISTICA";
 export type Access = "none" | "view" | "edit";
 
 export const MODULES = [
@@ -25,6 +25,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   FINANCEIRO: "Financeiro",
   COMERCIAL: "Comercial",
   ATENDIMENTO: "Atendimento",
+  LOGISTICA: "Logística",
 };
 
 /** Matriz de permissões por perfil. Ajuste aqui para mudar o que cada perfil vê. */
@@ -43,6 +44,10 @@ export const PERMISSIONS: Record<Role, Record<ModuleKey, Access>> = {
   },
   ATENDIMENTO: {
     painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "view", automacoes: "view", email: "none",
+    manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
+  },
+  LOGISTICA: {
+    painel: "none", crm: "none", pedidos: "view", estoque: "edit", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "none", email: "none",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
 };

@@ -12,17 +12,17 @@ const LABEL: Record<string, { t: string; c: string }> = {
 };
 
 /** Mostra o estado da conexão por QR e o QR code, atualizando a cada 3 segundos. */
-export default function QrPanel({ initial, children }: { initial: S; children?: React.ReactNode }) {
+export default function QrPanel({ conexao, initial, children, semQr }: { conexao: string; initial: S; children?: React.ReactNode; semQr?: React.ReactNode }) {
   const [s, setS] = useState<S>(initial);
   useEffect(() => {
     let alive = true;
     const tick = async () => {
-      const r = await fetch("/api/whatsapp/status", { cache: "no-store" }).catch(() => null);
+      const r = await fetch(`/api/whatsapp/status?c=${encodeURIComponent(conexao)}`, { cache: "no-store" }).catch(() => null);
       if (alive && r?.ok) setS(await r.json());
     };
     const id = setInterval(tick, 3000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [conexao]);
 
   const l = LABEL[s.status] ?? LABEL.desconectado;
   return (
@@ -36,7 +36,7 @@ export default function QrPanel({ initial, children }: { initial: S; children?: 
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={s.qr} alt="QR code para conectar o WhatsApp" className="w-56 h-56 rounded-xl border border-surface-line bg-white p-2" />
           <ol className="text-sm text-graphite list-decimal pl-5 flex flex-col gap-1">
-            <li>Abra o WhatsApp no celular da empresa.</li>
+            <li>Abra o WhatsApp no celular deste número.</li>
             <li>Toque em Mais opções › Aparelhos conectados.</li>
             <li>Toque em Conectar um aparelho e aponte para este QR.</li>
           </ol>
@@ -45,6 +45,7 @@ export default function QrPanel({ initial, children }: { initial: S; children?: 
       {s.status === "indisponivel" && (
         <p className="text-sm text-graphite-muted">O serviço de conexão não respondeu. Ele está no container <code>whatsapp</code> da VPS.</p>
       )}
+      {s.status === "desconectado" && semQr}
       {s.status === "conectado" && children}
     </div>
   );

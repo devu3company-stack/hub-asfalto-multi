@@ -104,7 +104,7 @@ export async function enviarCotacaoWhatsApp(_p: EnviarState, form: FormData): Pr
     `\nValores sujeitos a confirmação no fechamento do pedido.`;
 
   try {
-    await sendMessage(numero, texto, "humano", { userId: u.id });
+    await sendMessage(numero, texto, "humano", { userId: u.id, vendedorId: u.id });
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Falha ao enviar." };
   }

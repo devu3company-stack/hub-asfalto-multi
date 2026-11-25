@@ -146,7 +146,7 @@ async function empresaDoCnpj(cnpj: string) {
  * para esse telefone ou documento, cria o lead na primeira etapa do funil principal.
  */
 const filaLead = new Map<string, Promise<unknown>>();
-export function leadDoWhatsApp(p: { chat: string; nome?: string | null; texto: string }) {
+export function leadDoWhatsApp(p: { chat: string; nome?: string | null; texto: string; responsavelId?: string | null }) {
   // Uma mensagem por conversa de cada vez, para duas mensagens seguidas não criarem dois leads.
   const antes = filaLead.get(p.chat) ?? Promise.resolve();
   const agora = antes.catch(() => null).then(() => criarLeadDoWhatsApp(p));
@@ -155,7 +155,7 @@ export function leadDoWhatsApp(p: { chat: string; nome?: string | null; texto: s
   return agora;
 }
 
-async function criarLeadDoWhatsApp(p: { chat: string; nome?: string | null; texto: string }) {
+async function criarLeadDoWhatsApp(p: { chat: string; nome?: string | null; texto: string; responsavelId?: string | null }) {
   if ((await getSetting("crm.leadAutomatico")) === "nao") return null;
   const doc = acharDocumento(p.texto);
   if (!doc) return null;
@@ -176,7 +176,7 @@ async function criarLeadDoWhatsApp(p: { chat: string; nome?: string | null; text
   const titulo = `${emp?.nome || p.nome || formatarDoc(doc.numero)} — WhatsApp`;
   const [n] = await db.insert(N).values({
     funilId: funil.id, etapaId: etapa.id, titulo, contato: p.nome ?? null, empresa: emp?.razao ?? null,
-    telefone: tel, documento: doc.numero, fonte: "WhatsApp", valor: 0, ordem: Number(m) + 1,
+    telefone: tel, documento: doc.numero, fonte: "WhatsApp", valor: 0, ordem: Number(m) + 1, responsavelId: p.responsavelId ?? null,
   }).returning({ id: N.id });
   await registrar(n.id, null, "criada",
     `Lead criado automaticamente: o cliente informou o ${doc.tipo} ${formatarDoc(doc.numero)} no WhatsApp.` +

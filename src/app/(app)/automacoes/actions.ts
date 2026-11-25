@@ -71,7 +71,7 @@ export async function aprovar(_p: FormMsg, f: FormData): Promise<FormMsg> {
   } else {
     const texto = String(f.get("texto") ?? "").trim();
     if (!texto) return { ok: false, message: "A mensagem está vazia." };
-    try { await sendMessage(ap.chat, texto, "humano", { userId: u.id }); }
+    try { await sendMessage(ap.chat, texto, "humano", { userId: u.id, conexao: ap.conexaoId }); }
     catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Não enviou." }; }
     await db.update(AP).set({ status: "enviada", texto, decididaPor: u.id, decididaEm: new Date() }).where(eq(AP.id, ap.id));
   }

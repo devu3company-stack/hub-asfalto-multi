@@ -7,6 +7,7 @@ import { db, schema } from "./db";
 import { appUrl } from "./email/envio";
 import { registrarNoHistorico } from "./frete/historico";
 import { sendMessage, setAiPaused } from "./whatsapp/service";
+import { conexaoPadrao } from "./whatsapp/conexoes";
 import { dispararDepois, linkComprovante } from "./automacoes/motor";
 
 /** Avisa as automações do cliente (entregador confirmado, saiu, entregue). */
@@ -35,11 +36,23 @@ const diaTxt = (d: Date | null) => (d ? d.toLocaleDateString("pt-BR", { timeZone
 
 type Entrega = typeof E.$inferSelect;
 
+export const DESCARGA: Record<string, string> = {
+  destinatario: "Por conta do destinatário",
+  motorista: "Pelo motorista (sem ajudante)",
+  ajudante: "Com ajudante (chapa)",
+};
+
+export function textoDescarga(e: Pick<Entrega, "descarga" | "ajudantes" | "valorDescarga">) {
+  const base = e.descarga === "ajudante" ? `Com ${e.ajudantes || 1} ajudante${(e.ajudantes || 1) > 1 ? "s" : ""} (chapa)` : DESCARGA[e.descarga] ?? DESCARGA.destinatario;
+  return e.valorDescarga > 0 ? `${base} — adicional de ${reais(e.valorDescarga)}` : base;
+}
+
 export function resumo(e: Entrega) {
   return [
     `${e.origem} → ${e.destino}${e.uf ? `/${e.uf}` : ""}${e.distanciaKm ? ` (${Math.round(e.distanciaKm)} km)` : ""}`,
     [e.kg ? kgTxt(e.kg) : null, e.produto ? `${e.qtd ? `${e.qtd} ` : ""}${e.produto}` : null, e.veiculo].filter(Boolean).join(" · "),
-    `Valor: *${reais(e.valor)}*`,
+    `Descarga: ${textoDescarga(e)}`,
+    `Valor: *${reais(e.valor + e.valorDescarga)}*${e.valorDescarga > 0 ? ` (frete ${reais(e.valor)} + descarga ${reais(e.valorDescarga)})` : ""}`,
     `Coleta: ${diaTxt(e.coletaEm)}`,
   ].join("\n");
 }
@@ -51,8 +64,8 @@ async function candidatos(veiculo: string | null) {
 }
 
 async function whats(telefone: string, texto: string, userId?: string | null) {
-  await sendMessage(telefone, texto, "humano", { userId: userId ?? undefined });
-  await setAiPaused(telefone, true).catch(() => null); // a IA não responde aos entregadores
+  const cx = await sendMessage(telefone, texto, "auto", { conexao: await conexaoPadrao(), userId });
+  await setAiPaused(telefone, true, cx).catch(() => null); // a IA não responde aos entregadores
 }
 
 /** Avisa pelo WhatsApp os entregadores que podem levar o frete. */

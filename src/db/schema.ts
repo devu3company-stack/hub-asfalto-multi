@@ -1,8 +1,8 @@
-import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
-export const roleEnum = pgEnum("role", ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO"]);
+export const roleEnum = pgEnum("role", ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO", "LOGISTICA"]);
 
 const id = () => text("id").primaryKey().$defaultFn(() => createId());
 
@@ -147,18 +147,31 @@ export const settings = pgTable("settings", {
 });
 
 /** Uma conversa do WhatsApp (um contato). `chat` = número só com dígitos (ou o identificador do WhatsApp). */
+/** Cada número de WhatsApp conectado. "principal" é o número que já existia; os dos usuários são "u_<id>". */
+export const waConexoes = pgTable("wa_conexoes", {
+  id: text("id").primaryKey(),
+  nome: text("nome").notNull(),
+  tipo: text("tipo").notNull().default("qr"), // qr | oficial
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  iaLigada: boolean("ia_ligada").notNull().default(false), // IA e automações respondem neste número
+  numero: text("numero"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const waChats = pgTable("wa_chats", {
-  chat: text("chat").primaryKey(),
+  conexaoId: text("conexao_id").notNull().default("principal"),
+  chat: text("chat").notNull(),
   name: text("name"),
   channel: text("channel").notNull().default("qr"), // qr | oficial — por onde chegou a última mensagem
   aiPaused: boolean("ai_paused").notNull().default(false),
   optout: boolean("optout").notNull().default(false), // pediu para não receber mensagens de marketing (respondeu SAIR)
   lastText: text("last_text"),
   lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("wa_chats_last_at_idx").on(t.lastAt)]);
+}, (t) => [primaryKey({ columns: [t.conexaoId, t.chat] }), index("wa_chats_last_at_idx").on(t.lastAt)]);
 
 export const waMessages = pgTable("wa_messages", {
   id: text("id").primaryKey().$defaultFn(() => createId()), // id do WhatsApp quando houver
+  conexaoId: text("conexao_id").notNull().default("principal"),
   chat: text("chat").notNull(),
   channel: text("channel").notNull(), // qr | oficial
   fromMe: boolean("from_me").notNull(),
@@ -170,7 +183,7 @@ export const waMessages = pgTable("wa_messages", {
   midiaMime: text("midia_mime"),
   midiaNome: text("midia_nome"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("wa_messages_chat_idx").on(t.chat, t.createdAt)]);
+}, (t) => [index("wa_messages_chat_idx").on(t.conexaoId, t.chat, t.createdAt)]);
 
 /* ------------------------------- E-mail marketing ------------------------------- */
 
@@ -449,6 +462,9 @@ export const entregas = pgTable("entregas", {
   distanciaKm: doublePrecision("distancia_km").notNull().default(0),
   veiculo: text("veiculo"),
   valor: doublePrecision("valor").notNull(), // pago ao entregador
+  descarga: text("descarga").notNull().default("destinatario"), // destinatario | motorista | ajudante
+  ajudantes: integer("ajudantes").notNull().default(0),
+  valorDescarga: doublePrecision("valor_descarga").notNull().default(0), // adicional de descarga pago ao entregador
   coletaEm: timestamp("coleta_em", { withTimezone: true }),
   observacao: text("observacao"),
   status: text("status").notNull().default("publicado"), // publicado | aceito | coletado | entregue | cancelado
@@ -503,6 +519,7 @@ export const automacaoAprovacoes = pgTable("automacao_aprovacoes", {
   id: id(),
   execucaoId: text("execucao_id").references(() => automacaoExecucoes.id, { onDelete: "cascade" }),
   automacaoId: text("automacao_id").references(() => automacoes.id, { onDelete: "cascade" }),
+  conexaoId: text("conexao_id"),
   chat: text("chat").notNull(),
   nome: text("nome"),
   pedido: text("pedido"), // o que o cliente escreveu

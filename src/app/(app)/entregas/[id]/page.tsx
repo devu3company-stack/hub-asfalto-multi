@@ -5,7 +5,7 @@ import { requireModule } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { nomeLoja } from "@/lib/lojas";
-import { STATUS } from "@/lib/entregas";
+import { STATUS, textoDescarga } from "@/lib/entregas";
 import { PageHeader, Badge, brl } from "@/components/ui";
 import { cancelar, liberar, reavisar } from "../actions";
 
@@ -25,7 +25,7 @@ export default async function Entrega({ params, searchParams }: { params: { id: 
   ];
   return (
     <>
-      <PageHeader title={`${e.origem} → ${e.destino}${e.uf ? `/${e.uf}` : ""}`} subtitle={`${brl(e.valor)} · ${nomeLoja(e.loja)}`}>
+      <PageHeader title={`${e.origem} → ${e.destino}${e.uf ? `/${e.uf}` : ""}`} subtitle={`${brl(e.valor + e.valorDescarga)}${e.valorDescarga ? ` (frete ${brl(e.valor)} + descarga ${brl(e.valorDescarga)})` : ""} · ${nomeLoja(e.loja)}`}>
         <div className="flex items-center gap-2"><Badge tone={STATUS[e.status].tom}>{STATUS[e.status].rotulo}</Badge><Link href="/entregas" className="btn-outline h-9 px-4">Voltar</Link></div>
       </PageHeader>
       {searchParams.publicado && <p role="status" className="card text-sm text-[#1E6B34]">Frete publicado. Os entregadores estão sendo avisados pelo WhatsApp (leva alguns segundos por pessoa).</p>}
@@ -34,7 +34,7 @@ export default async function Entrega({ params, searchParams }: { params: { id: 
           <h2 className="font-display font-bold text-lg">Frete</h2>
           {[["Cliente", e.cliente], ["Endereço", e.endereco], ["Contato no local", e.contatoCliente], ["Produto", e.produto ? `${e.qtd ?? ""} ${e.produto}` : null],
             ["Peso", e.kg ? `${e.kg.toLocaleString("pt-BR")} kg` : null], ["Distância", e.distanciaKm ? `${e.distanciaKm.toLocaleString("pt-BR")} km` : null],
-            ["Veículo", e.veiculo ?? "Qualquer"], ["Coleta", e.coletaEm?.toLocaleDateString("pt-BR", { timeZone: "UTC" })], ["Observação", e.observacao]]
+            ["Veículo", e.veiculo ?? "Qualquer"], ["Descarga", textoDescarga(e)], ["Coleta", e.coletaEm?.toLocaleDateString("pt-BR", { timeZone: "UTC" })], ["Observação", e.observacao]]
             .filter(([, v]) => v).map(([k, v]) => <p key={k as string}><span className="text-graphite">{k}:</span> <strong>{v}</strong></p>)}
         </section>
         <section className="card flex flex-col gap-3">

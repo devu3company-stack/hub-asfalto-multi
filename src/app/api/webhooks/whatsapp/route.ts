@@ -19,8 +19,10 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(b.media.base64, "base64");
     if (buffer.length <= MAX_MIDIA) midia = await paraOuvir({ buffer, mime: String(b.media.mimetype ?? "application/octet-stream"), nome: b.media.fileName ?? null, tipo });
   }
+  const sessao = typeof b.session === "string" && /^[a-z0-9_-]{1,40}$/i.test(b.session) ? b.session : "principal";
   await handleIncoming({
-    id: b.id ? `qr_${b.id}` : undefined,
+    conexaoId: sessao,
+    id: b.id ? `qr_${sessao}_${b.id}` : undefined,
     chat: chatKey(String(b.chat)),
     channel: "qr",
     fromMe: Boolean(b.fromMe),

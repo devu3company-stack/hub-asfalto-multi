@@ -151,7 +151,7 @@ export async function sincronizarOmieClientes(loja: LojaId) {
 export async function extrairDoWhatsApp(loja: LojaId) {
   const msgs = await db.select({ chat: schema.waMessages.chat, text: schema.waMessages.text, nome: schema.waChats.name })
     .from(schema.waMessages)
-    .leftJoin(schema.waChats, eq(schema.waChats.chat, schema.waMessages.chat))
+    .leftJoin(schema.waChats, and(eq(schema.waChats.chat, schema.waMessages.chat), eq(schema.waChats.conexaoId, schema.waMessages.conexaoId)))
     .where(and(eq(schema.waMessages.fromMe, false), sql`${schema.waMessages.text} ~* '[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}'`));
   let total = 0;
   for (const m of msgs) {

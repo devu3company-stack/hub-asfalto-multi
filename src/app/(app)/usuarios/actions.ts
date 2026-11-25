@@ -8,7 +8,7 @@ import { db, schema } from "@/lib/db";
 
 const U = schema.users;
 
-const ROLES = ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO"] as const;
+const ROLES = ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO", "LOGISTICA"] as const;
 
 const novo = z.object({
   name: z.string().trim().min(2, "Informe o nome."),

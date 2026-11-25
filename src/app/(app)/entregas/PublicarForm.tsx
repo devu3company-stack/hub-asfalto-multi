@@ -9,6 +9,7 @@ export default function PublicarForm({ veiculos, lojas, origem, nEntregadores }:
   const [a, setA] = useState<AnaliseJSON | null>(null);
   const [aviso, setAviso] = useState("");
   const [carregando, start] = useTransition();
+  const [descarga, setDescarga] = useState("destinatario");
   const val = (n: string) => (form.current?.querySelector(`[name="${n}"]`) as HTMLInputElement | null)?.value ?? "";
   const numero = (s: string) => Number(s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s) || 0;
 
@@ -43,7 +44,15 @@ export default function PublicarForm({ veiculos, lojas, origem, nEntregadores }:
           <div><label htmlFor="coleta" className="label">Data da coleta</label><input id="coleta" name="coleta" type="date" className="input" /></div>
           <div><label htmlFor="loja" className="label">Loja</label>
             <select id="loja" name="loja" className="input">{lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></div>
-          <div className="lg:col-span-2"><label htmlFor="observacao" className="label">Observação para o entregador</label><input id="observacao" name="observacao" className="input" placeholder="Ex.: descarga por conta do cliente" /></div>
+          <div><label htmlFor="descarga" className="label">Descarga</label>
+            <select id="descarga" name="descarga" value={descarga} onChange={(e) => setDescarga(e.target.value)} className="input">
+              <option value="destinatario">Por conta do destinatário</option>
+              <option value="motorista">Pelo motorista (sem ajudante)</option>
+              <option value="ajudante">Com ajudante (chapa)</option>
+            </select></div>
+          {descarga === "ajudante" && <div><label htmlFor="ajudantes" className="label">Quantos ajudantes</label><input id="ajudantes" name="ajudantes" inputMode="numeric" defaultValue="1" className="input" /></div>}
+          {descarga !== "destinatario" && <div><label htmlFor="valorDescarga" className="label">Adicional de descarga (R$)</label><input id="valorDescarga" name="valorDescarga" inputMode="decimal" className="input" placeholder="0 se já incluso" /></div>}
+          <div className="lg:col-span-2"><label htmlFor="observacao" className="label">Observação para o entregador</label><input id="observacao" name="observacao" className="input" placeholder="Ex.: descarga em 2º andar, sem elevador" /></div>
         </div>
         <div className="rounded-xl bg-[#F8F7F6] p-3 flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">

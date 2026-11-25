@@ -200,5 +200,5 @@ export async function registrarNoHistorico(e: typeof schema.entregas.$inferSelec
   if (!e.veiculo || !e.kg || !e.distanciaKm) return;
   await db.delete(H).where(eq(H.entregaId, e.id));
   await db.insert(H).values({ data: e.entregueEm ?? new Date(), cidade: e.destino, uf: e.uf, produto: e.produto, qtd: e.qtd,
-    kg: e.kg, distanciaKm: e.distanciaKm, veiculo: normalizarVeiculo(e.veiculo), orcamento: e.valor, custo: e.valor, origem: "entrega", entregaId: e.id });
+    kg: e.kg, distanciaKm: e.distanciaKm, veiculo: normalizarVeiculo(e.veiculo), orcamento: e.valor + e.valorDescarga, custo: e.valor + e.valorDescarga, origem: "entrega", entregaId: e.id });
 }

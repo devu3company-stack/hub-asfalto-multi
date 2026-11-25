@@ -52,9 +52,9 @@ export default async function Entregas({ searchParams }: { searchParams: { aba?:
                 <Link href={`/entregas/${e.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-4 hover:bg-[#F8F7F6]">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{e.origem} → {e.destino}{e.uf ? `/${e.uf}` : ""}</p>
-                    <p className="text-xs text-graphite">{[e.cliente, e.kg ? `${e.kg.toLocaleString("pt-BR")} kg` : null, e.veiculo, `coleta ${dia(e.coletaEm)}`].filter(Boolean).join(" · ")}</p>
+                    <p className="text-xs text-graphite">{[e.cliente, e.kg ? `${e.kg.toLocaleString("pt-BR")} kg` : null, e.veiculo, e.descarga === "ajudante" ? `${e.ajudantes} ajudante(s)` : null, `coleta ${dia(e.coletaEm)}`].filter(Boolean).join(" · ")}</p>
                   </div>
-                  <span className="font-bold">{brl(e.valor)}</span>
+                  <span className="font-bold">{brl(e.valor + e.valorDescarga)}</span>
                   <Badge tone={STATUS[e.status].tom}>{STATUS[e.status].rotulo}</Badge>
                   <span className="text-sm text-graphite w-36 truncate">{e.entregador?.nome ?? (e.status === "publicado" ? `${e.avisados} avisado(s)` : "")}</span>
                 </Link>

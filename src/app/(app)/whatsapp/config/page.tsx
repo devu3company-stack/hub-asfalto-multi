@@ -1,95 +1,87 @@
 import Link from "next/link";
+import { asc } from "drizzle-orm";
 import { requireModule } from "@/lib/auth";
+import { db, schema } from "@/lib/db";
 import { getSetting } from "@/lib/settings";
 import { listIntegrations } from "@/lib/integrations/store";
-import { qrStatus } from "@/lib/whatsapp/gateway";
+import { qrSessoes } from "@/lib/whatsapp/gateway";
+import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
 import { AI_LABELS, AI_PROVIDERS } from "@/lib/ai";
 import { PageHeader, Badge } from "@/components/ui";
-import QrPanel from "../QrPanel";
-import { desconectarQr, salvarConfig } from "../actions";
+import { alternarIA, definirDono, desconectar, salvarConfig } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfigWhatsApp() {
   await requireModule("integracoes", "edit");
-  const [qr, canal, iaLigada, instrucoes, provedor, integ] = await Promise.all([
-    qrStatus(), getSetting("whatsapp.canal"), getSetting("ia.ligada"), getSetting("ia.instrucoes"), getSetting("ia.provedor"), listIntegrations(),
+  const [conexoes, usuarios, sessoes, padrao, instrucoes, provedor, integ] = await Promise.all([
+    db.query.waConexoes.findMany({ orderBy: asc(schema.waConexoes.nome) }),
+    db.query.users.findMany({ columns: { id: true, name: true }, orderBy: asc(schema.users.name) }),
+    qrSessoes(), conexaoPadrao(), getSetting("ia.instrucoes"), getSetting("ia.provedor"), listIntegrations(),
   ]);
-  const oficial = integ.find((i) => i.provider === "whatsapp_oficial");
   const ia = integ.find((i) => i.provider === provedor);
+  const estado = (id: string) => (id === "oficial" ? "conectado" : sessoes[id]?.status ?? "desconectado");
   return (
     <>
-      <PageHeader title="Configurar WhatsApp" subtitle="Conexão por QR code ou API oficial e atendente com IA.">
+      <PageHeader title="WhatsApp da equipe" subtitle="Cada usuário conecta o próprio número em Meu WhatsApp. Aqui você vê todos e configura a IA.">
         <Link href="/whatsapp" className="btn-outline h-9 px-4">Voltar às conversas</Link>
       </PageHeader>
-      <div className="grid lg:grid-cols-3 gap-4">
-        <section className="card flex flex-col gap-3 lg:col-span-2">
-          <h2 className="font-display font-bold text-lg">Conexão por QR code</h2>
-          <QrPanel initial={qr}>
-            {(
-              <form action={desconectarQr}>
-                <button className="text-sm font-semibold text-[#A0261C]">Desconectar este número</button>
-              </form>
-            )}
-          </QrPanel>
-        </section>
 
-        <section className="card flex flex-col gap-3">
-          <h2 className="font-display font-bold text-lg">API oficial (Meta)</h2>
-          <div>
-            {oficial ? (
-              oficial.status === "ok" ? <Badge tone="green">Conectada</Badge> : oficial.status === "erro" ? <Badge tone="red">Com erro</Badge> : <Badge tone="orange">Não testada</Badge>
-            ) : (
-              <Badge tone="gray">Não configurada</Badge>
-            )}
-          </div>
-          <p className="text-sm text-graphite-muted">Mais estável e sem risco de bloqueio do número. Mensagens que a empresa inicia precisam de template aprovado.</p>
-          {<Link href="/integracoes" className="text-sm font-semibold text-brand-text">Configurar em Integrações</Link>}
-        </section>
-      </div>
+      <section className="card p-0 overflow-hidden">
+        <h2 className="font-display font-bold text-lg p-4 pb-2">Números conectados</h2>
+        <ul>
+          {conexoes.map((c) => {
+            const st = estado(c.id);
+            return (
+              <li key={c.id} className="border-t border-surface-line p-4 flex flex-wrap items-center gap-3">
+                <div className="min-w-[180px]">
+                  <p className="font-semibold">{c.nome}</p>
+                  <p className="text-xs text-graphite">{sessoes[c.id]?.number ? `+${sessoes[c.id].number}` : c.tipo === "oficial" ? "API oficial" : "—"}</p>
+                </div>
+                <Badge tone={st === "conectado" ? "green" : st === "aguardando_qr" ? "orange" : "gray"}>{st === "conectado" ? "Conectado" : st === "aguardando_qr" ? "Aguardando QR" : "Desconectado"}</Badge>
+                <form action={alternarIA}><input type="hidden" name="conexao" value={c.id} />
+                  <button className="btn-outline h-9 px-3 text-sm">{c.iaLigada ? "IA e automações: ligadas" : "IA e automações: desligadas"}</button></form>
+                <form action={definirDono} className="flex items-center gap-2 ml-auto">
+                  <input type="hidden" name="conexao" value={c.id} />
+                  <label htmlFor={`d-${c.id}`} className="text-sm text-graphite">Dono</label>
+                  <select id={`d-${c.id}`} name="userId" defaultValue={c.userId ?? ""} className="input h-9 w-48"><option value="">— ninguém —</option>{usuarios.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+                  <button className="btn-outline h-9 px-3 text-sm">Salvar</button>
+                </form>
+                {st === "conectado" && c.tipo !== "oficial" && <form action={desconectar}><input type="hidden" name="conexao" value={c.id} /><button className="text-sm text-[#A0261C] font-semibold">Desconectar</button></form>}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
-      {(
-        <section className="card flex flex-col gap-4">
-          <h2 className="font-display font-bold text-lg">Envio e atendente com IA</h2>
-          <form action={salvarConfig} className="flex flex-col gap-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="canal" className="label">Canal usado para enviar</label>
-                <select id="canal" name="canal" defaultValue={canal} className="input">
-                  <option value="qr">QR code</option>
-                  <option value="oficial">API oficial</option>
-                </select>
-                <p className="text-xs text-graphite-muted mt-1">A IA sempre responde pelo mesmo canal em que o cliente escreveu.</p>
-              </div>
-              <div>
-                <label htmlFor="provedor" className="label">IA que responde</label>
-                <select id="provedor" name="provedor" defaultValue={provedor} className="input">
-                  {AI_PROVIDERS.map((p) => {
-                    const row = integ.find((i) => i.provider === p);
-                    return (
-                      <option key={p} value={p}>
-                        {AI_LABELS[p]}{row ? (row.status === "ok" ? " · conectada" : row.status === "erro" ? " · com erro" : " · não testada") : " · não configurada"}
-                      </option>
-                    );
-                  })}
-                </select>
-                {!ia && <p className="text-xs text-[#A0261C] mt-1">Esta IA ainda não foi configurada em Integrações.</p>}
-              </div>
-              <label className="flex items-center gap-2 text-sm font-medium min-h-[44px] sm:col-span-2">
-                <input type="checkbox" name="ia" defaultChecked={iaLigada === "sim"} className="w-5 h-5 accent-[#C25A14]" />
-                Atendente com IA ligado
-              </label>
+      <section className="card flex flex-col gap-4">
+        <h2 className="font-display font-bold text-lg">Atendente com IA e avisos do sistema</h2>
+        <form action={salvarConfig} className="flex flex-col gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="padrao" className="label">Número dos avisos do sistema</label>
+              <select id="padrao" name="padrao" defaultValue={padrao} className="input">{conexoes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+              <p className="text-xs text-graphite-muted mt-1">Usado para avisar os entregadores e nas automações de clientes que não têm vendedor.</p>
             </div>
             <div>
-              <label htmlFor="instrucoes" className="label">Instruções do atendente</label>
-              <textarea id="instrucoes" name="instrucoes" rows={6} defaultValue={instrucoes} className="input h-auto py-3 text-sm" />
-              <p className="text-xs text-graphite-muted mt-1">Diga quem é a empresa, o que vende, como falar e o que nunca prometer. Quando não souber, a IA passa a conversa para um atendente e para de responder ali.</p>
+              <label htmlFor="provedor" className="label">IA que responde</label>
+              <select id="provedor" name="provedor" defaultValue={provedor} className="input">
+                {AI_PROVIDERS.map((p) => {
+                  const row = integ.find((i) => i.provider === p);
+                  return <option key={p} value={p}>{AI_LABELS[p]}{row ? (row.status === "ok" ? " · conectada" : row.status === "erro" ? " · com erro" : " · não testada") : " · não configurada"}</option>;
+                })}
+              </select>
+              {!ia && <p className="text-xs text-[#A0261C] mt-1">Esta IA ainda não foi configurada em Integrações.</p>}
             </div>
-            <div><button className="btn-primary">Salvar</button></div>
-          </form>
-        </section>
-      )}
-
+          </div>
+          <div>
+            <label htmlFor="instrucoes" className="label">Instruções do atendente</label>
+            <textarea id="instrucoes" name="instrucoes" rows={6} defaultValue={instrucoes} className="input h-auto py-3 text-sm" />
+            <p className="text-xs text-graphite-muted mt-1">Valem para todos os números com a IA ligada. Quando não souber, a IA passa a conversa para o atendente e para de responder ali.</p>
+          </div>
+          <div><button className="btn-primary">Salvar</button></div>
+        </form>
+      </section>
     </>
   );
 }

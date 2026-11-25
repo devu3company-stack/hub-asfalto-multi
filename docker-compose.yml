@@ -31,7 +31,8 @@ services:
       WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN}
       HUB_WEBHOOK_URL: http://app:3000/api/webhooks/whatsapp
     volumes:
-      - wa_auth:/data/auth
+      - wa_auth:/data/auth # número que já estava conectado (sessão "principal")
+      - wa_sessoes:/data/sessoes # números dos usuários
 
   migrate:
     build: .
@@ -43,6 +44,7 @@ services:
     profiles: ["tools"]
 
 volumes:
+  wa_sessoes:
   hub_data:
   pgdata:
   wa_auth:

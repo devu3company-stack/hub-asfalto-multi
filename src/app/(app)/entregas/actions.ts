@@ -12,6 +12,7 @@ import { avisar } from "@/lib/entregas";
 import { normalizarTelefone } from "@/lib/entregador-auth";
 import { analisar, normalizarVeiculo, VEICULOS } from "@/lib/frete/historico";
 import { sendMessage, setAiPaused } from "@/lib/whatsapp/service";
+import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
 import type { FormMsg } from "@/components/ActionForm";
 import type { AnaliseJSON } from "@/components/AnaliseFrete";
 
@@ -41,7 +42,10 @@ export async function publicar(_p: FormMsg, f: FormData): Promise<FormMsg> {
     endereco: txt(f, "endereco") || null, cliente: txt(f, "cliente") || null, contatoCliente: txt(f, "contatoCliente") || null,
     telefoneCliente: normalizarTelefone(txt(f, "telefoneCliente")) || null,
     produto: txt(f, "produto") || null, qtd: num(f, "qtd") || null, kg: num(f, "kg"), distanciaKm: num(f, "km"),
-    veiculo: normalizarVeiculo(txt(f, "veiculo")) || null, valor, observacao: txt(f, "observacao") || null,
+    veiculo: normalizarVeiculo(txt(f, "veiculo")) || null, valor,
+    descarga: ["destinatario", "motorista", "ajudante"].includes(txt(f, "descarga")) ? txt(f, "descarga") : "destinatario",
+    ajudantes: txt(f, "descarga") === "ajudante" ? Math.max(1, Math.round(num(f, "ajudantes")) || 1) : 0,
+    valorDescarga: Math.max(0, num(f, "valorDescarga")), observacao: txt(f, "observacao") || null,
     coletaEm: data ? new Date(`${data}T12:00:00Z`) : null, criadoPor: u.id,
   }).returning({ id: E.id });
   await audit(u.id, "entregas.publicar", `${destino} R$ ${valor}`);
@@ -78,8 +82,8 @@ const novoPin = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
 
 async function enviarAcesso(nome: string, telefone: string, pin: string, userId: string) {
   const msg = `Olá, ${nome.split(" ")[0]}! 👋\nVocê foi cadastrado no *app de fretes da Asfalto Multi*. Por ele você recebe e aceita os fretes disponíveis.\n\nAcesse: ${appUrl()}/entregador\nTelefone: ${telefone.replace(/^55/, "")}\nSenha: *${pin}*\n\nDica: no celular, abra o link e escolha "Adicionar à tela inicial".`;
-  await sendMessage(telefone, msg, "humano", { userId });
-  await setAiPaused(telefone, true).catch(() => null);
+  const cx = await sendMessage(telefone, msg, "auto", { conexao: await conexaoPadrao(), userId });
+  await setAiPaused(telefone, true, cx).catch(() => null);
 }
 
 export async function salvarEntregador(_p: FormMsg, f: FormData): Promise<FormMsg> {

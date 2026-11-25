@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { entregadorAtual } from "@/lib/entregador-auth";
-import { STATUS } from "@/lib/entregas";
+import { STATUS, textoDescarga } from "@/lib/entregas";
 import { AceitarForm, ColetarForm, EntregarForm } from "../../Forms";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +28,7 @@ export default async function Frete({ params }: { params: { id: string } }) {
     ["Distância", e.distanciaKm ? `${Math.round(e.distanciaKm)} km` : null],
     ["Carga", [e.qtd ? `${e.qtd}` : null, e.produto, e.kg ? `(${e.kg.toLocaleString("pt-BR")} kg)` : null].filter(Boolean).join(" ") || null],
     ["Veículo", e.veiculo],
+    ["Descarga", textoDescarga(e)],
     ["Coleta", e.coletaEm?.toLocaleDateString("pt-BR", { timeZone: "UTC", weekday: "long", day: "2-digit", month: "2-digit" })],
     ["Observação", e.observacao],
     // Dados do cliente só para quem aceitou.
@@ -40,7 +41,7 @@ export default async function Frete({ params }: { params: { id: string } }) {
       <section className="card flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display font-bold text-xl">{e.destino}{e.uf ? `/${e.uf}` : ""}</h1>
-          <span className="font-bold text-2xl text-brand-text">{reais(e.valor)}</span>
+          <span className="font-bold text-2xl text-brand-text">{reais(e.valor + e.valorDescarga)}</span>
         </div>
         {meu && <p className="text-sm font-semibold">{STATUS[e.status].rotulo}</p>}
         <dl className="text-sm flex flex-col gap-1.5">

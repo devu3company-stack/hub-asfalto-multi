@@ -8,6 +8,19 @@ import { buscar, lerArquivo } from "../manuais/index";
 import { garantirFunil, registrar } from "../crm";
 import { rascunhoIA, responderComIA, sendMessage } from "../whatsapp/service";
 import { GATILHOS, type Passo } from "./definicoes";
+import { conexao as lerConexao, conexaoPara } from "../whatsapp/conexoes";
+
+/** Número por onde a automação fala: o da conversa, o do vendedor da negociação ou o padrão. Só se a IA/automações estiverem ligadas nele. */
+async function numeroDaAutomacao(ctx: Contexto, chat: string) {
+  let vendedor = ctx.vendedorId ? String(ctx.vendedorId) : null;
+  if (!ctx.conexao && !vendedor && ctx.negociacaoId) {
+    const n = await db.query.crmNegociacoes.findFirst({ where: eq(N.id, String(ctx.negociacaoId)), columns: { responsavelId: true } });
+    vendedor = n?.responsavelId ?? null;
+  }
+  const id = await conexaoPara(chat, { conexaoId: ctx.conexao ? String(ctx.conexao) : null, userId: vendedor });
+  const cx = await lerConexao(id);
+  return { id, ligado: !!cx?.iaLigada, nome: cx?.nome ?? id };
+}
 
 const A = schema.automacoes, X = schema.automacaoExecucoes, AP = schema.automacaoAprovacoes;
 const N = schema.crmNegociacoes;
@@ -208,23 +221,26 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
 
     case "whatsapp": {
       if (!chat) return { acao: "seguir", texto: "Pulou o WhatsApp: cliente sem telefone" };
-      const conversa = await db.query.waChats.findFirst({ where: eq(schema.waChats.chat, chat), columns: { optout: true } });
+      const conversa = await db.query.waChats.findFirst({ where: and(eq(schema.waChats.chat, chat), eq(schema.waChats.optout, true)), columns: { optout: true } });
       if (conversa?.optout && a.grupo !== "frete") return { acao: "seguir", texto: "Pulou o WhatsApp: cliente pediu para sair" };
+      const numero = await numeroDaAutomacao(ctx, chat);
+      if (!numero.ligado) return { acao: "seguir", texto: `Pulou o WhatsApp: automações desligadas no número de ${numero.nome}` };
       if (a.grupo !== "frete") { const ate = foraDoHorario(); if (ate) return { acao: "esperar", ate, repetir: true, texto: "Fora do horário (8h–20h): envia às 8h" }; }
       const texto = aplicar(String(c.texto ?? ""), await variaveis(ctx));
       if (!texto) return { acao: "seguir", texto: "Mensagem vazia" };
       if (c.aprovacao) {
-        await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null, texto });
+        await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, conexaoId: numero.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null, texto });
         return { acao: "seguir", texto: "Mensagem aguardando aprovação do vendedor" };
       }
-      await sendMessage(chat, texto, "auto");
+      await sendMessage(chat, texto, "auto", { conexao: numero.id });
       return { acao: "seguir", texto: `WhatsApp enviado: "${texto.slice(0, 80)}"` };
     }
 
     case "orcamento": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
-      const sugestao = await rascunhoIA(chat, `Tarefa agora: ${String(c.instrucao ?? "")} A resposta será revisada por um vendedor antes de ir para o cliente.`).catch(() => null);
-      await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null,
+      const numero = await numeroDaAutomacao(ctx, chat);
+      const sugestao = await rascunhoIA(chat, `Tarefa agora: ${String(c.instrucao ?? "")} A resposta será revisada por um vendedor antes de ir para o cliente.`, numero.id).catch(() => null);
+      await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, conexaoId: numero.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null,
         texto: sugestao || `Olá${ctx.nome ? `, ${String(ctx.nome).split(" ")[0]}` : ""}! Vou preparar seu orçamento. Pode me confirmar a quantidade e o CEP de entrega?` });
       return { acao: "seguir", texto: sugestao ? "Orçamento montado pela IA, aguardando aprovação" : "Pedido de orçamento enviado para o vendedor (IA não configurada)" };
     }
@@ -233,19 +249,23 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
       const [r] = await buscar(String(ctx.texto ?? ""), { soIA: true, limite: 1 });
       if (!r) return { acao: "seguir", texto: "Nenhum manual com esse assunto" };
-      await sendMessage(chat, `Sobre isso, o manual *${r.titulo}* (pág. ${r.pagina}) diz:\n\n${r.trecho.slice(0, 900)}`, "auto");
+      const numero = await numeroDaAutomacao(ctx, chat);
+      if (!numero.ligado) return { acao: "seguir", texto: `Pulou: automações desligadas no número de ${numero.nome}` };
+      await sendMessage(chat, `Sobre isso, o manual *${r.titulo}* (pág. ${r.pagina}) diz:\n\n${r.trecho.slice(0, 900)}`, "auto", { conexao: numero.id });
       if (c.pdf !== false) {
         const m = await db.query.manuais.findFirst({ where: eq(schema.manuais.id, r.manualId) });
         if (m) {
           const buf = await lerArquivo(m.arquivo).catch(() => null);
-          if (buf && buf.length < 16 * 1024 * 1024) await sendMessage(chat, "", "auto", { midia: { buffer: buf, mime: "application/pdf", nome: `${m.titulo}.pdf`, tipo: "documento" } });
+          if (buf && buf.length < 16 * 1024 * 1024) await sendMessage(chat, "", "auto", { conexao: numero.id, midia: { buffer: buf, mime: "application/pdf", nome: `${m.titulo}.pdf`, tipo: "documento" } });
         }
       }
       return { acao: "seguir", texto: `Respondeu com o manual "${r.titulo}"` };
     }
     case "responder_ia": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
-      return (await responderComIA(chat)) ? { acao: "seguir", texto: "A IA respondeu" } : { acao: "seguir", texto: "IA não configurada" };
+      const numero = await numeroDaAutomacao(ctx, chat);
+      if (!numero.ligado) return { acao: "seguir", texto: `Pulou: IA desligada no número de ${numero.nome}` };
+      return (await responderComIA(chat, numero.id)) ? { acao: "seguir", texto: "A IA respondeu" } : { acao: "seguir", texto: "IA não configurada" };
     }
 
     case "email": {
