@@ -1,0 +1,9 @@
+# Usado quando a VPS já tem um Caddy em Docker (rede externa): o hub entra na rede dele.
+services:
+  app:
+    container_name: hub-asfalto
+    networks: [default, proxy]
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-pertinho_default}

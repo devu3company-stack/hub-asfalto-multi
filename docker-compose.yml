@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: hub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://hub:${POSTGRES_PASSWORD}@db:5432/hub
+      WA_GATEWAY_URL: http://whatsapp:3100
+      WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN}
+    depends_on: [db, whatsapp]
+    volumes:
+      - hub_data:/app/data # PDFs dos manuais
+    ports:
+      - "127.0.0.1:${HUB_PORT:-3500}:3000" # só o proxy da própria VPS acessa
+
+  # Conexão do WhatsApp por QR code (só rede interna; a sessão fica salva no volume wa_auth)
+  whatsapp:
+    build: ./whatsapp-gateway
+    restart: unless-stopped
+    environment:
+      WA_GATEWAY_TOKEN: ${WA_GATEWAY_TOKEN}
+      HUB_WEBHOOK_URL: http://app:3000/api/webhooks/whatsapp
+    volumes:
+      - wa_auth:/data/auth
+
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://hub:${POSTGRES_PASSWORD}@db:5432/hub
+    depends_on: [db]
+    command: sh -c "npx tsx scripts/migrate.ts && npx tsx scripts/seed.ts"
+    profiles: ["tools"]
+
+volumes:
+  hub_data:
+  pgdata:
+  wa_auth:
