@@ -1,7 +1,15 @@
 // Conexão do WhatsApp do Hub Asfalto Multi (mesma tecnologia de conexão do ZapPro: Baileys / QR code).
 // Só fica acessível na rede interna do Docker. Toda chamada exige o token compartilhado com o hub.
 import http from "node:http";
-import { rm } from "node:fs/promises";
+import { rm, readdir, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+
+// Apaga só o conteúdo: /data/auth pode ser o ponto de montagem do volume (rmdir dá EBUSY).
+async function limparAuth() {
+  await mkdir(AUTH_DIR, { recursive: true });
+  for (const f of await readdir(AUTH_DIR)) await rm(join(AUTH_DIR, f), { recursive: true, force: true });
+}
+process.on("unhandledRejection", (e) => console.error("erro não tratado:", e?.message ?? e));
 import { timingSafeEqual } from "node:crypto";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -69,7 +77,7 @@ async function start() {
         sock = null;
         if (code === DisconnectReason.loggedOut) {
           // Sessão encerrada no celular: limpa e volta a mostrar QR.
-          await rm(AUTH_DIR, { recursive: true, force: true });
+          await limparAuth();
           set({ status: "desconectado", qr: null, number: null, name: null });
           starting = false;
           setTimeout(start, 1000);
@@ -170,7 +178,7 @@ http
       if (req.method === "POST" && req.url === "/logout") {
         try { await sock?.logout(); } catch { /* já desconectado */ }
         sock = null;
-        await rm(AUTH_DIR, { recursive: true, force: true });
+        await limparAuth();
         set({ status: "desconectado", qr: null, number: null, name: null });
         setTimeout(start, 1000);
         return send(res, 200, { ok: true });
