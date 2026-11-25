@@ -40,6 +40,8 @@ export default async function Fretes({ searchParams }: { searchParams: { loja?: 
           <Badge tone={nRotas ? "green" : "gray"}>{nRotas} rota(s) própria(s)</Badge>
           <Badge tone={prov.melhorenvio ? "green" : "gray"}>Melhor Envio</Badge>
           <LojaTabs atual={loja} path="/fretes" />
+          <Link href="/fretes/avaliar" className="btn-outline h-9 px-4">Avaliar frete</Link>
+          <Link href="/fretes/historico" className="btn-outline h-9 px-4">Histórico</Link>
           <Link href={`/fretes/produtos?loja=${loja}`} className="btn-outline h-9 px-4">Produtos</Link>
           <Link href="/fretes/transportadoras" className="btn-outline h-9 px-4">Transportadoras e tabelas</Link>
         </div>

@@ -396,3 +396,74 @@ export const crmHistoricoRelations = relations(crmHistorico, ({ one }) => ({
   user: one(users, { fields: [crmHistorico.userId], references: [users.id] }),
 }));
 export const crmEtapasRelations = relations(crmEtapas, ({ one }) => ({ funil: one(crmFunis, { fields: [crmEtapas.funilId], references: [crmFunis.id] }) }));
+
+// ───────── Histórico de fretes (base da análise, veio da planilha "Histórico de Preços Fretes") ─────────
+
+export const freteHistorico = pgTable("frete_historico", {
+  id: id(),
+  data: timestamp("data", { withTimezone: true }).notNull(),
+  cidade: text("cidade"),
+  uf: text("uf"),
+  produto: text("produto"),
+  qtd: doublePrecision("qtd"),
+  kg: doublePrecision("kg").notNull(),
+  distanciaKm: doublePrecision("distancia_km").notNull(),
+  veiculo: text("veiculo").notNull(),
+  orcamento: doublePrecision("orcamento").notNull(), // valor que o freteiro pediu
+  custo: doublePrecision("custo").notNull(), // valor pago no fim
+  origem: text("origem").notNull().default("planilha"), // planilha | entrega | manual
+  entregaId: text("entrega_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("frete_hist_veiculo_idx").on(t.veiculo)]);
+
+// ───────── Entregadores externos e fretes publicados para eles ─────────
+
+export const entregadores = pgTable("entregadores", {
+  id: id(),
+  nome: text("nome").notNull(),
+  telefone: text("telefone").notNull().unique(), // só dígitos, com 55
+  documento: text("documento"),
+  placa: text("placa"),
+  veiculos: text("veiculos").array().notNull().default([]), // vazio = recebe todos
+  ativo: boolean("ativo").notNull().default(true),
+  pinHash: text("pin_hash").notNull(),
+  ultimoAcesso: timestamp("ultimo_acesso", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const entregas = pgTable("entregas", {
+  id: id(),
+  loja: text("loja").notNull().default("asfaltomulti"),
+  origem: text("origem").notNull().default("Mogi Mirim-SP"),
+  destino: text("destino").notNull(), // cidade
+  uf: text("uf"),
+  endereco: text("endereco"),
+  cliente: text("cliente"),
+  contatoCliente: text("contato_cliente"),
+  produto: text("produto"),
+  qtd: doublePrecision("qtd"),
+  kg: doublePrecision("kg").notNull().default(0),
+  distanciaKm: doublePrecision("distancia_km").notNull().default(0),
+  veiculo: text("veiculo"),
+  valor: doublePrecision("valor").notNull(), // pago ao entregador
+  coletaEm: timestamp("coleta_em", { withTimezone: true }),
+  observacao: text("observacao"),
+  status: text("status").notNull().default("publicado"), // publicado | aceito | coletado | entregue | cancelado
+  entregadorId: text("entregador_id").references(() => entregadores.id, { onDelete: "set null" }),
+  aceitoEm: timestamp("aceito_em", { withTimezone: true }),
+  coletadoEm: timestamp("coletado_em", { withTimezone: true }),
+  entregueEm: timestamp("entregue_em", { withTimezone: true }),
+  canhoto: text("canhoto"), // arquivo em data/entregas
+  recebedor: text("recebedor"),
+  entregaLat: doublePrecision("entrega_lat"),
+  entregaLng: doublePrecision("entrega_lng"),
+  entregaPrecisao: doublePrecision("entrega_precisao"),
+  avisados: integer("avisados").notNull().default(0),
+  criadoPor: text("criado_por").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("entregas_status_idx").on(t.status)]);
+
+export const entregasRelations = relations(entregas, ({ one }) => ({
+  entregador: one(entregadores, { fields: [entregas.entregadorId], references: [entregadores.id] }),
+  autor: one(users, { fields: [entregas.criadoPor], references: [users.id] }),
+}));

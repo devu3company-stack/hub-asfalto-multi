@@ -29,6 +29,8 @@ const BADGE: Record<string, string> = {
   orange: "bg-brand-soft text-brand-text",
   red: "bg-[#FBE3E1] text-[#A0261C]",
   gray: "bg-[#E6E4E3] text-[#3E3B3C]",
+  blue: "bg-[#E1ECFA] text-[#1F4E8C]",
+  yellow: "bg-[#FBF0CC] text-[#7A5A00]",
 };
 export function Badge({ tone, children }: { tone: keyof typeof BADGE; children: React.ReactNode }) {
   return <span className={`badge ${BADGE[tone]}`}>{children}</span>;
