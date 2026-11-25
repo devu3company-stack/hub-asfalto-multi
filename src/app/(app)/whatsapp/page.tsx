@@ -17,6 +17,8 @@ export const dynamic = "force-dynamic";
 const fmt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 const showNumber = (chat: string) => (/^\d+$/.test(chat) ? `+${chat}` : chat);
 
+import { negociacoesDoTelefone } from "@/lib/crm";
+
 export default async function WhatsApp({ searchParams }: { searchParams: { chat?: string } }) {
   const user = await requireModule("whatsapp");
   const admin = can(user.role, "integracoes", "edit");
@@ -35,6 +37,7 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
   const ia = integ.find((i) => i.provider === provedor);
 
   const selected = searchParams.chat ? chats.find((c) => c.chat === searchParams.chat) : undefined;
+  const negs = selected ? await negociacoesDoTelefone(selected.chat) : [];
   const msgs = selected
     ? await db.query.waMessages.findMany({ where: eq(schema.waMessages.chat, selected.chat), orderBy: asc(schema.waMessages.createdAt), limit: 200 })
     : [];
@@ -155,11 +158,16 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     <p className="text-xs text-graphite-muted">{showNumber(selected.chat)}</p>
                   </div>
                   {editor && (
+                    <div className="flex flex-wrap gap-2">
+                    {negs.length
+                      ? negs.map((g) => <Link key={g.id} href={`/crm/${g.id}`} className="btn-outline h-10">Negociação: {g.titulo.slice(0, 30)}</Link>)
+                      : <Link href={`/crm/nova?nome=${encodeURIComponent(selected.name ?? "")}&tel=${selected.chat.replace(/^55(?=\d{10,11}$)/, "")}`} className="btn-outline h-10">Criar negociação</Link>}
                     <form action={alternarIAConversa}>
                       <input type="hidden" name="chat" value={selected.chat} />
                       <input type="hidden" name="pausar" value={selected.aiPaused ? "0" : "1"} />
                       <button className="btn-outline h-10">{selected.aiPaused ? "Devolver para a IA" : "Assumir atendimento"}</button>
                     </form>
+                    </div>
                   )}
                 </div>
                 <ol className="flex-1 p-4 flex flex-col gap-2 overflow-y-auto max-h-[520px] bg-[#F8F7F6]">

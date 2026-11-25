@@ -43,6 +43,13 @@
       "when": 1795576846679,
       "tag": "0005_lojas_fases",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795606554283,
+      "tag": "0006_crm",
+      "breakpoints": true
     }
   ]
 }

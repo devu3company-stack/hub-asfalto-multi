@@ -313,3 +313,81 @@ export const manuaisRelations = relations(manuais, ({ one, many }) => ({
   produto: one(produtos, { fields: [manuais.produtoId], references: [produtos.id] }),
   trechos: many(manualTrechos),
 }));
+
+/* ------------------------------ CRM (funil de vendas) ------------------------------ */
+
+export const crmFunis = pgTable("crm_funis", {
+  id: id(),
+  nome: text("nome").notNull(),
+  ordem: integer("ordem").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const crmEtapas = pgTable("crm_etapas", {
+  id: id(),
+  funilId: text("funil_id").notNull().references(() => crmFunis.id, { onDelete: "cascade" }),
+  nome: text("nome").notNull(),
+  ordem: integer("ordem").notNull().default(0),
+}, (t) => [index("crm_etapas_funil_idx").on(t.funilId)]);
+
+export const crmNegociacoes = pgTable("crm_negociacoes", {
+  id: id(),
+  funilId: text("funil_id").notNull().references(() => crmFunis.id, { onDelete: "cascade" }),
+  etapaId: text("etapa_id").notNull().references(() => crmEtapas.id, { onDelete: "restrict" }),
+  titulo: text("titulo").notNull(),
+  loja: text("loja").notNull().default("asfaltomulti"),
+  contato: text("contato"),
+  empresa: text("empresa"),
+  telefone: text("telefone"), // só dígitos; liga com a conversa do WhatsApp
+  email: text("email"),
+  valor: doublePrecision("valor").notNull().default(0),
+  qualificacao: integer("qualificacao").notNull().default(0), // 0 a 5 estrelas
+  fonte: text("fonte"),
+  previsaoFechamento: timestamp("previsao_fechamento", { withTimezone: true }),
+  responsavelId: text("responsavel_id").references(() => users.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("andamento"), // andamento | ganha | perdida
+  motivoPerda: text("motivo_perda"),
+  cotacaoId: text("cotacao_id"),
+  pedidoId: text("pedido_id"),
+  ordem: doublePrecision("ordem").notNull().default(0), // posição dentro da etapa
+  fechadaEm: timestamp("fechada_em", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("crm_neg_funil_idx").on(t.funilId, t.status), index("crm_neg_tel_idx").on(t.telefone)]);
+
+export const crmTarefas = pgTable("crm_tarefas", {
+  id: id(),
+  negociacaoId: text("negociacao_id").notNull().references(() => crmNegociacoes.id, { onDelete: "cascade" }),
+  tipo: text("tipo").notNull().default("tarefa"), // ligacao | whatsapp | email | reuniao | visita | tarefa
+  descricao: text("descricao").notNull(),
+  quando: timestamp("quando", { withTimezone: true }).notNull(),
+  responsavelId: text("responsavel_id").references(() => users.id, { onDelete: "set null" }),
+  concluida: boolean("concluida").notNull().default(false),
+  concluidaEm: timestamp("concluida_em", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("crm_tarefas_neg_idx").on(t.negociacaoId), index("crm_tarefas_quando_idx").on(t.concluida, t.quando)]);
+
+export const crmHistorico = pgTable("crm_historico", {
+  id: id(),
+  negociacaoId: text("negociacao_id").notNull().references(() => crmNegociacoes.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  tipo: text("tipo").notNull(), // nota | etapa | status | criada | tarefa | edicao
+  texto: text("texto").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("crm_hist_neg_idx").on(t.negociacaoId)]);
+
+export const crmNegociacoesRelations = relations(crmNegociacoes, ({ one, many }) => ({
+  etapa: one(crmEtapas, { fields: [crmNegociacoes.etapaId], references: [crmEtapas.id] }),
+  responsavel: one(users, { fields: [crmNegociacoes.responsavelId], references: [users.id] }),
+  tarefas: many(crmTarefas),
+  historico: many(crmHistorico),
+}));
+export const crmTarefasRelations = relations(crmTarefas, ({ one }) => ({
+  negociacao: one(crmNegociacoes, { fields: [crmTarefas.negociacaoId], references: [crmNegociacoes.id] }),
+  responsavel: one(users, { fields: [crmTarefas.responsavelId], references: [users.id] }),
+}));
+export const crmHistoricoRelations = relations(crmHistorico, ({ one }) => ({
+  negociacao: one(crmNegociacoes, { fields: [crmHistorico.negociacaoId], references: [crmNegociacoes.id] }),
+  user: one(users, { fields: [crmHistorico.userId], references: [users.id] }),
+}));
+export const crmEtapasRelations = relations(crmEtapas, ({ one }) => ({ funil: one(crmFunis, { fields: [crmEtapas.funilId], references: [crmFunis.id] }) }));

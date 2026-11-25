@@ -3,6 +3,7 @@ export type Access = "none" | "view" | "edit";
 
 export const MODULES = [
   { key: "painel", label: "Painel", href: "/" },
+  { key: "crm", label: "Funil de vendas", href: "/crm" },
   { key: "pedidos", label: "Pedidos", href: "/pedidos" },
   { key: "estoque", label: "Estoque", href: "/estoque" },
   { key: "relatorios", label: "Relatórios", href: "/relatorios" },
@@ -27,19 +28,19 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** Matriz de permissões por perfil. Ajuste aqui para mudar o que cada perfil vê. */
 export const PERMISSIONS: Record<Role, Record<ModuleKey, Access>> = {
   ADMIN: {
-    painel: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", email: "edit",
+    painel: "edit", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", email: "edit",
     manuais: "edit", whatsapp: "edit", integracoes: "edit", usuarios: "edit",
   },
   FINANCEIRO: {
-    painel: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", email: "none",
+    painel: "view", crm: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", email: "none",
     manuais: "view", whatsapp: "none", integracoes: "none", usuarios: "none",
   },
   COMERCIAL: {
-    painel: "view", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", email: "edit",
+    painel: "view", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", email: "edit",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
   ATENDIMENTO: {
-    painel: "none", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", email: "none",
+    painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", email: "none",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
 };
