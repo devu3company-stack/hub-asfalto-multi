@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import { getSetting } from "./settings";
+import { dispararDepois } from "./automacoes/motor";
 
 /** Funil de vendas no estilo do RD Station CRM: funis, etapas, negociações, tarefas e histórico. */
 
@@ -67,7 +68,10 @@ export async function moverEtapa(id: string, etapaId: string, ordem: number, use
   const e = await db.query.crmEtapas.findFirst({ where: eq(E.id, etapaId) });
   if (!n || !e || e.funilId !== n.funilId) return;
   await db.update(N).set({ etapaId, ordem, updatedAt: new Date() }).where(eq(N.id, id));
-  if (n.etapaId !== etapaId) await registrar(id, userId, "etapa", `Moveu de "${n.etapa.nome}" para "${e.nome}"`);
+  if (n.etapaId !== etapaId) {
+    await registrar(id, userId, "etapa", `Moveu de "${n.etapa.nome}" para "${e.nome}"`);
+    dispararDepois("crm.etapa", { negociacaoId: id, etapaId, etapa: e.nome, nome: n.contato, telefone: n.telefone, email: n.email, loja: n.loja }, `${id}:${etapaId}:${Date.now()}`);
+  }
 }
 
 /** Negociações em andamento ligadas a um telefone (para o atalho na conversa do WhatsApp). */
@@ -180,5 +184,6 @@ async function criarLeadDoWhatsApp(p: { chat: string; nome?: string | null; text
   const P = schema.pedidos;
   const [{ q }] = await db.select({ q: sql<number>`count(*)::int` }).from(P).where(sql`regexp_replace(coalesce(${P.documento}, ''), '\\D', '', 'g') = ${doc.numero}`);
   if (q > 0) await registrar(n.id, null, "nota", `Já é cliente: ${q} pedido(s) anteriores com esse ${doc.tipo}.`);
+  dispararDepois("crm.lead_criado", { negociacaoId: n.id, etapaId: etapa.id, etapa: etapa.nome, nome: p.nome ?? null, telefone: tel, chat: p.chat }, n.id);
   return n.id;
 }

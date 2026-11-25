@@ -152,6 +152,7 @@ export const waChats = pgTable("wa_chats", {
   name: text("name"),
   channel: text("channel").notNull().default("qr"), // qr | oficial — por onde chegou a última mensagem
   aiPaused: boolean("ai_paused").notNull().default(false),
+  optout: boolean("optout").notNull().default(false), // pediu para não receber mensagens de marketing (respondeu SAIR)
   lastText: text("last_text"),
   lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("wa_chats_last_at_idx").on(t.lastAt)]);
@@ -250,6 +251,7 @@ export const carrinhos = pgTable("carrinhos", {
   loja: text("loja").notNull().default("lojadoasfalto"),
   email: text("email"),
   nome: text("nome"),
+  telefone: text("telefone"),
   url: text("url"),
   valor: doublePrecision("valor").notNull().default(0),
   itens: jsonb("itens").notNull().default([]),
@@ -440,6 +442,7 @@ export const entregas = pgTable("entregas", {
   endereco: text("endereco"),
   cliente: text("cliente"),
   contatoCliente: text("contato_cliente"),
+  telefoneCliente: text("telefone_cliente"), // WhatsApp do cliente para os avisos da entrega
   produto: text("produto"),
   qtd: doublePrecision("qtd"),
   kg: doublePrecision("kg").notNull().default(0),
@@ -466,4 +469,53 @@ export const entregas = pgTable("entregas", {
 export const entregasRelations = relations(entregas, ({ one }) => ({
   entregador: one(entregadores, { fields: [entregas.entregadorId], references: [entregadores.id] }),
   autor: one(users, { fields: [entregas.criadoPor], references: [users.id] }),
+}));
+
+// ───────── Automações (regras "Quando → Então"; o editor visual usa a mesma estrutura) ─────────
+
+export const automacoes = pgTable("automacoes", {
+  id: id(),
+  nome: text("nome").notNull(),
+  grupo: text("grupo").notNull().default("geral"), // followup | duvidas | frete | remarketing | geral
+  ativa: boolean("ativa").notNull().default(false),
+  gatilho: text("gatilho").notNull(),
+  gatilhoConfig: jsonb("gatilho_config").$type<Record<string, unknown>>().notNull().default({}),
+  passos: jsonb("passos").$type<{ id: string; tipo: string; config: Record<string, unknown> }[]>().notNull().default([]),
+  modelo: text("modelo"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const automacaoExecucoes = pgTable("automacao_execucoes", {
+  id: id(),
+  automacaoId: text("automacao_id").notNull().references(() => automacoes.id, { onDelete: "cascade" }),
+  chave: text("chave").notNull(), // evita rodar duas vezes para o mesmo evento
+  contexto: jsonb("contexto").$type<Record<string, string | number | null | undefined>>().notNull(),
+  passo: integer("passo").notNull().default(0),
+  status: text("status").notNull().default("ativa"), // ativa | esperando | rodando | concluida | cancelada | erro
+  proximaEm: timestamp("proxima_em", { withTimezone: true }).notNull().defaultNow(),
+  log: jsonb("log").$type<{ em: string; texto: string }[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("auto_exec_chave_uq").on(t.automacaoId, t.chave), index("auto_exec_fila_idx").on(t.status, t.proximaEm)]);
+
+export const automacaoAprovacoes = pgTable("automacao_aprovacoes", {
+  id: id(),
+  execucaoId: text("execucao_id").references(() => automacaoExecucoes.id, { onDelete: "cascade" }),
+  automacaoId: text("automacao_id").references(() => automacoes.id, { onDelete: "cascade" }),
+  chat: text("chat").notNull(),
+  nome: text("nome"),
+  pedido: text("pedido"), // o que o cliente escreveu
+  texto: text("texto").notNull(), // mensagem sugerida
+  status: text("status").notNull().default("pendente"), // pendente | enviada | descartada
+  decididaPor: text("decidida_por").references(() => users.id, { onDelete: "set null" }),
+  decididaEm: timestamp("decidida_em", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const automacaoExecucoesRelations = relations(automacaoExecucoes, ({ one }) => ({
+  automacao: one(automacoes, { fields: [automacaoExecucoes.automacaoId], references: [automacoes.id] }),
+}));
+export const automacaoAprovacoesRelations = relations(automacaoAprovacoes, ({ one }) => ({
+  automacao: one(automacoes, { fields: [automacaoAprovacoes.automacaoId], references: [automacoes.id] }),
 }));

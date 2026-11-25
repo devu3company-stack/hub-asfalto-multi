@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db, schema } from "./db";
+import { dispararDepois } from "./automacoes/motor";
 import { call } from "./integrations/omie";
 import { getConfig, type Config } from "./integrations/store";
 import { getSetting } from "./settings";
@@ -47,6 +48,10 @@ export async function registrarPedido(loja: LojaId, o: PedidoShopify) {
     pagamento: o.financial_status ?? null, payload: o as unknown as Record<string, unknown>, updatedAt: new Date(),
   };
   const atual = await db.query.pedidos.findFirst({ where: and(eq(P.loja, loja), eq(P.shopifyId, String(o.id))) });
+  if (o.financial_status === "paid" && atual?.pagamento !== "paid" && !o.cancelled_at) {
+    dispararDepois("pedido.pago", { loja, pedido: o.name, valor: Number(o.total_price) || 0, nome: nome || null, email: o.email ?? null,
+      telefone: o.shipping_address?.phone ?? o.billing_address?.phone ?? o.customer?.phone ?? null }, `${loja}:${o.id}`);
+  }
   let id = atual?.id;
   if (!atual) {
     const [r] = await db.insert(P).values({

@@ -142,7 +142,7 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     <li key={m.id} className={`max-w-[85%] lg:max-w-[65%] rounded-2xl px-3 py-2 text-sm shadow-sm ${m.fromMe ? "self-end bg-[#FDEBDD]" : "self-start bg-white"}`}>
                       {m.midia && <Midia m={m} />}
                       {(!m.midia || m.text !== rotulo(m)) && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
-                      <p className="text-[11px] text-graphite-muted mt-1">{m.sentBy === "ia" ? "IA · " : m.sentBy === "humano" ? "Atendente · " : ""}{fmt(m.createdAt)}</p>
+                      <p className="text-[11px] text-graphite-muted mt-1">{m.sentBy === "ia" ? "IA · " : m.sentBy === "auto" ? "Automação · " : m.sentBy === "humano" ? "Atendente · " : ""}{fmt(m.createdAt)}</p>
                     </li>
                   ))}
                 </ol>

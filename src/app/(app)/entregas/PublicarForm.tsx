@@ -33,6 +33,7 @@ export default function PublicarForm({ veiculos, lojas, origem, nEntregadores }:
           <div><label htmlFor="km" className="label">Distância (km)</label><input id="km" name="km" inputMode="decimal" className="input" /></div>
           <div className="lg:col-span-2"><label htmlFor="endereco" className="label">Endereço de entrega</label><input id="endereco" name="endereco" className="input" placeholder="Só aparece para quem aceitar" /></div>
           <div><label htmlFor="cliente" className="label">Cliente</label><input id="cliente" name="cliente" className="input" /></div>
+          <div><label htmlFor="telefoneCliente" className="label">WhatsApp do cliente</label><input id="telefoneCliente" name="telefoneCliente" inputMode="tel" className="input" placeholder="Para os avisos da entrega" /></div>
           <div><label htmlFor="contatoCliente" className="label">Contato no local</label><input id="contatoCliente" name="contatoCliente" className="input" placeholder="Nome e telefone" /></div>
           <div><label htmlFor="produto" className="label">Produto</label><input id="produto" name="produto" className="input" placeholder="Sacos, baldes, lombadas..." /></div>
           <div><label htmlFor="qtd" className="label">Quantidade</label><input id="qtd" name="qtd" inputMode="decimal" className="input" /></div>

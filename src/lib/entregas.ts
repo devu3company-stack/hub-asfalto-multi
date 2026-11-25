@@ -7,6 +7,16 @@ import { db, schema } from "./db";
 import { appUrl } from "./email/envio";
 import { registrarNoHistorico } from "./frete/historico";
 import { sendMessage, setAiPaused } from "./whatsapp/service";
+import { dispararDepois, linkComprovante } from "./automacoes/motor";
+
+/** Avisa as automações do cliente (entregador confirmado, saiu, entregue). */
+async function eventoEntrega(id: string, status: string) {
+  const e = await db.query.entregas.findFirst({ where: eq(E.id, id), with: { entregador: { columns: { nome: true } } } });
+  if (!e) return;
+  const tel = (e.telefoneCliente || e.contatoCliente || "").replace(/\D/g, "");
+  dispararDepois("entrega.status", { status, entregaId: e.id, nome: e.cliente, telefone: tel.length >= 10 ? tel : null, destino: `${e.destino}${e.uf ? `/${e.uf}` : ""}`,
+    entregador: e.entregador?.nome ?? "", linkComprovante: status === "entregue" ? await linkComprovante(e.id) : "", loja: e.loja }, `${e.id}:${status}`);
+}
 
 const E = schema.entregas;
 const D = schema.entregadores;
@@ -72,12 +82,14 @@ export async function aceitar(entregaId: string, entregadorId: string) {
   const end = [e.endereco, e.cliente ? `Cliente: ${e.cliente}` : null, e.contatoCliente ? `Contato: ${e.contatoCliente}` : null].filter(Boolean).join("\n");
   whats(d.telefone, `✅ *O frete é seu!*\n\n${resumo(e)}${end ? `\n\n${end}` : ""}\n\nMarque a coleta e a entrega pelo app: ${appUrl()}/entregador/f/${e.id}`)
     .catch((err) => console.error("confirmação entregador:", err instanceof Error ? err.message : err));
+  await eventoEntrega(e.id, "aceito");
   return { ok: true as const };
 }
 
 export async function coletar(entregaId: string, entregadorId: string) {
   const [e] = await db.update(E).set({ status: "coletado", coletadoEm: new Date() })
     .where(and(eq(E.id, entregaId), eq(E.entregadorId, entregadorId), eq(E.status, "aceito"))).returning({ id: E.id });
+  if (e) await eventoEntrega(e.id, "coletado");
   return !!e;
 }
 
@@ -92,6 +104,7 @@ export async function entregar(entregaId: string, entregadorId: string, p: { fot
     .where(and(eq(E.id, entregaId), eq(E.entregadorId, entregadorId), inArray(E.status, ["aceito", "coletado"]))).returning();
   if (!e) return false;
   await registrarNoHistorico(e);
+  await eventoEntrega(e.id, "entregue");
   return true;
 }
 

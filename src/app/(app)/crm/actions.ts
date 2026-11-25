@@ -9,6 +9,7 @@ import { moverEtapa, registrar, TIPOS_TAREFA } from "@/lib/crm";
 import { numBR } from "@/lib/frete/motor";
 import { setSetting } from "@/lib/settings";
 import { salvarContato } from "@/lib/email/contatos";
+import { dispararDepois } from "@/lib/automacoes/motor";
 import type { FormMsg } from "@/components/ActionForm";
 
 const N = schema.crmNegociacoes, T = schema.crmTarefas, E = schema.crmEtapas;
@@ -49,6 +50,8 @@ export async function criarNegociacao(_p: FormMsg, f: FormData): Promise<FormMsg
     await db.insert(schema.crmTarefas).values({ negociacaoId: n.id, tipo: d.fonte === "WhatsApp" ? "whatsapp" : "ligacao",
       descricao: "Retornar o contato", quando, responsavelId: d.responsavelId ?? u.id });
   }
+  dispararDepois("crm.lead_criado", { negociacaoId: n.id, etapaId: etapa.id, etapa: etapa.nome, nome: d.contato, telefone: d.telefone, email: d.email, loja: d.loja }, n.id);
+  dispararDepois("crm.etapa", { negociacaoId: n.id, etapaId: etapa.id, etapa: etapa.nome, nome: d.contato, telefone: d.telefone, email: d.email, loja: d.loja }, `${n.id}:${etapa.id}:${Date.now()}`);
   if (d.email) await salvarContato({ email: d.email, nome: d.contato, telefone: d.telefone, origem: "manual", loja: d.loja }).catch(() => null);
   await audit(u.id, "crm.criar", d.titulo);
   revalidatePath("/crm");

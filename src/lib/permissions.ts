@@ -10,6 +10,7 @@ export const MODULES = [
   { key: "financeiro", label: "Financeiro", href: "/financeiro" },
   { key: "fretes", label: "Fretes", href: "/fretes" },
   { key: "entregas", label: "Entregas", href: "/entregas" },
+  { key: "automacoes", label: "Automações", href: "/automacoes" },
   { key: "email", label: "E-mail marketing", href: "/email" },
   { key: "manuais", label: "Manuais", href: "/manuais" },
   { key: "whatsapp", label: "WhatsApp", href: "/whatsapp" },
@@ -29,19 +30,19 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** Matriz de permissões por perfil. Ajuste aqui para mudar o que cada perfil vê. */
 export const PERMISSIONS: Record<Role, Record<ModuleKey, Access>> = {
   ADMIN: {
-    painel: "edit", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", entregas: "edit", email: "edit",
+    painel: "edit", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", entregas: "edit", automacoes: "edit", email: "edit",
     manuais: "edit", whatsapp: "edit", integracoes: "edit", usuarios: "edit",
   },
   FINANCEIRO: {
-    painel: "view", crm: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", entregas: "view", email: "none",
+    painel: "view", crm: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", entregas: "view", automacoes: "none", email: "none",
     manuais: "view", whatsapp: "none", integracoes: "none", usuarios: "none",
   },
   COMERCIAL: {
-    painel: "view", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", entregas: "edit", email: "edit",
+    painel: "view", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "edit", email: "edit",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
   ATENDIMENTO: {
-    painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "view", email: "none",
+    painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "view", automacoes: "view", email: "none",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
 };

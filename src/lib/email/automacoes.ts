@@ -21,7 +21,7 @@ export async function salvarAutomacao(chave: AutomacaoChave, loja: LojaId, ativo
 /* ------------------------------- Eventos da Shopify ------------------------------- */
 
 type Checkout = {
-  token?: string; email?: string | null; abandoned_checkout_url?: string; total_price?: string; completed_at?: string | null;
+  token?: string; email?: string | null; phone?: string | null; shipping_address?: { phone?: string } | null; abandoned_checkout_url?: string; total_price?: string; completed_at?: string | null;
   customer?: { first_name?: string | null; last_name?: string | null } | null;
   billing_address?: { first_name?: string; last_name?: string; city?: string; province_code?: string; phone?: string } | null;
   line_items?: { title?: string; quantity?: number }[];
@@ -32,7 +32,7 @@ export async function aoCheckout(loja: LojaId, c: Checkout) {
   if (!c.token || c.completed_at) return;
   const nome = [c.customer?.first_name ?? c.billing_address?.first_name, c.customer?.last_name ?? c.billing_address?.last_name].filter(Boolean).join(" ") || null;
   const dados = {
-    email: c.email?.toLowerCase() ?? null, nome, url: c.abandoned_checkout_url ?? null, valor: Number(c.total_price) || 0,
+    email: c.email?.toLowerCase() ?? null, nome, telefone: (c.phone ?? c.billing_address?.phone ?? c.shipping_address?.phone ?? null) || null, url: c.abandoned_checkout_url ?? null, valor: Number(c.total_price) || 0,
     itens: (c.line_items ?? []).map((i) => ({ titulo: i.title, qtd: i.quantity })), updatedAt: new Date(),
   };
   await db.insert(schema.carrinhos).values({ id: c.token, loja, ...dados })

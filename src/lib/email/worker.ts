@@ -2,6 +2,7 @@ import "server-only";
 import { rodarAutomacoes } from "./automacoes";
 import { processarFila } from "./envio";
 import { rotinasPedidos } from "../pedidos";
+import { rodarAutomacoes as rodarRegras } from "../automacoes/motor";
 
 /** Roda dentro do servidor do hub: a cada minuto agenda automações/campanhas e envia a fila. */
 export function iniciarWorkerEmail() {
@@ -15,6 +16,7 @@ export function iniciarWorkerEmail() {
       await rodarAutomacoes();
       await processarFila();
       await rotinasPedidos();
+      await rodarRegras();
     } catch (e) {
       console.error("worker de e-mail:", e instanceof Error ? e.message : e);
     } finally {

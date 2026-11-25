@@ -39,6 +39,7 @@ export async function publicar(_p: FormMsg, f: FormData): Promise<FormMsg> {
   const [e] = await db.insert(E).values({
     loja: lojaValida(txt(f, "loja")), origem: txt(f, "origem") || "Mogi Mirim-SP", destino, uf: txt(f, "uf").toUpperCase() || null,
     endereco: txt(f, "endereco") || null, cliente: txt(f, "cliente") || null, contatoCliente: txt(f, "contatoCliente") || null,
+    telefoneCliente: normalizarTelefone(txt(f, "telefoneCliente")) || null,
     produto: txt(f, "produto") || null, qtd: num(f, "qtd") || null, kg: num(f, "kg"), distanciaKm: num(f, "km"),
     veiculo: normalizarVeiculo(txt(f, "veiculo")) || null, valor, observacao: txt(f, "observacao") || null,
     coletaEm: data ? new Date(`${data}T12:00:00Z`) : null, criadoPor: u.id,
