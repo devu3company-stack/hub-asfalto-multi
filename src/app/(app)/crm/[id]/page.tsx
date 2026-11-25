@@ -4,7 +4,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import { requireModule } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { can } from "@/lib/permissions";
-import { FONTES, garantirFunil, motivosPerda, TIPOS_TAREFA } from "@/lib/crm";
+import { FONTES, formatarDoc, garantirFunil, motivosPerda, TIPOS_TAREFA } from "@/lib/crm";
 import { LOJAS, nomeLoja } from "@/lib/lojas";
 import { PageHeader, Badge, brl } from "@/components/ui";
 import ActionForm from "@/components/ActionForm";
@@ -26,6 +26,7 @@ function Campos({ n, usuarios, uid, pre }: { n?: Neg; usuarios: { id: string; na
       <div><label htmlFor="contato" className="label">Contato</label><input id="contato" name="contato" defaultValue={v.contato ?? ""} className="input" /></div>
       <div><label htmlFor="empresa" className="label">Empresa</label><input id="empresa" name="empresa" defaultValue={v.empresa ?? ""} className="input" /></div>
       <div><label htmlFor="telefone" className="label">WhatsApp</label><input id="telefone" name="telefone" inputMode="tel" defaultValue={v.telefone ?? ""} className="input" placeholder="19 99999-0000" /></div>
+      <div><label htmlFor="documento" className="label">CPF ou CNPJ</label><input id="documento" name="documento" inputMode="numeric" defaultValue={v.documento ? formatarDoc(v.documento) : ""} className="input" /></div>
       <div><label htmlFor="email" className="label">E-mail</label><input id="email" name="email" type="email" defaultValue={v.email ?? ""} className="input" /></div>
       <div><label htmlFor="valor" className="label">Valor (R$)</label><input id="valor" name="valor" inputMode="decimal" defaultValue={v.valor ? String(v.valor).replace(".", ",") : ""} className="input" /></div>
       <div><label htmlFor="previsao" className="label">Previsão de fechamento</label><input id="previsao" name="previsao" type="date" defaultValue={ymd(v.previsaoFechamento ?? null)} className="input" /></div>
@@ -43,7 +44,7 @@ function Campos({ n, usuarios, uid, pre }: { n?: Neg; usuarios: { id: string; na
   );
 }
 
-export default async function Negociacao({ params, searchParams }: { params: { id: string }; searchParams: { funil?: string; nome?: string; tel?: string } }) {
+export default async function Negociacao({ params, searchParams }: { params: { id: string }; searchParams: { funil?: string; etapa?: string; nome?: string; tel?: string } }) {
   const user = await requireModule("crm");
   const editor = can(user.role, "crm", "edit");
   const usuarios = await db.query.users.findMany({ where: eq(schema.users.active, true), columns: { id: true, name: true }, orderBy: asc(schema.users.name) });
@@ -51,17 +52,55 @@ export default async function Negociacao({ params, searchParams }: { params: { i
   if (params.id === "nova") {
     if (!editor) notFound();
     const funis = await garantirFunil();
-    const funilId = funis.some((f) => f.id === searchParams.funil) ? searchParams.funil! : funis[0].id;
+    const etapaPedida = searchParams.etapa ? await db.query.crmEtapas.findFirst({ where: eq(schema.crmEtapas.id, searchParams.etapa) }) : null;
+    const funilId = etapaPedida?.funilId ?? (funis.some((f) => f.id === searchParams.funil) ? searchParams.funil! : funis[0].id);
     const etapas = await db.query.crmEtapas.findMany({ where: eq(schema.crmEtapas.funilId, funilId), orderBy: asc(schema.crmEtapas.ordem) });
+    const origemPadrao = searchParams.tel ? "WhatsApp" : "Telefone";
     return (
       <>
-        <PageHeader title="Nova negociação"><Link href="/crm" className="btn-outline h-9 px-4">Voltar</Link></PageHeader>
-        <section className="card">
-          <ActionForm action={criarNegociacao} label="Criar negociação">
-            <div><label htmlFor="etapaId" className="label">Etapa</label>
-              <select id="etapaId" name="etapaId" className="input">{etapas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></div>
-            <Campos usuarios={usuarios} uid={user.id} pre={{ contato: searchParams.nome ?? null, telefone: searchParams.tel ?? null, fonte: searchParams.tel ? "WhatsApp" : null,
-              titulo: searchParams.nome ? `Orçamento — ${searchParams.nome}` : "" }} />
+        <PageHeader title="Novo lead" subtitle="Para quem ligou, chamou no WhatsApp ou passou na loja.">
+          <Link href="/crm" className="btn-outline h-9 px-4">Voltar ao funil</Link>
+        </PageHeader>
+        <section className="card max-w-2xl">
+          <ActionForm action={criarNegociacao} label="Cadastrar lead">
+            <fieldset>
+              <legend className="label">Como ele entrou em contato?</legend>
+              <div className="flex flex-wrap gap-2">
+                {["Telefone", "WhatsApp", "Loja física", "Indicação", "Outro"].map((o) => (
+                  <label key={o} className="cursor-pointer">
+                    <input type="radio" name="fonte" value={o} defaultChecked={o === origemPadrao} className="peer sr-only" />
+                    <span className="inline-flex items-center min-h-[40px] px-4 rounded-full border border-surface-line text-sm font-semibold peer-checked:bg-brand peer-checked:text-white peer-checked:border-brand peer-focus-visible:ring-2 peer-focus-visible:ring-graphite-dark">{o}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div><label htmlFor="contato" className="label">Nome</label><input id="contato" name="contato" defaultValue={searchParams.nome ?? ""} className="input" autoFocus /></div>
+              <div><label htmlFor="telefone" className="label">Telefone / WhatsApp</label><input id="telefone" name="telefone" inputMode="tel" defaultValue={searchParams.tel ?? ""} className="input" placeholder="19 99999-0000" /></div>
+              <div className="sm:col-span-2"><label htmlFor="interesse" className="label">O que ele procura?</label>
+                <textarea id="interesse" name="interesse" rows={3} className="input h-auto py-2" placeholder="Ex.: 40 sacos de asfalto frio para entrega em Mogi Mirim na semana que vem" /></div>
+              <div><label htmlFor="valor" className="label">Valor estimado (R$)</label><input id="valor" name="valor" inputMode="decimal" className="input" placeholder="opcional" /></div>
+              <div><label htmlFor="etapaId" className="label">Etapa</label>
+                <select id="etapaId" name="etapaId" defaultValue={etapaPedida?.id} className="input">{etapas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></div>
+            </div>
+            <label className="flex items-center gap-2 text-sm min-h-[40px]"><input type="checkbox" name="retorno" value="1" defaultChecked className="w-5 h-5 accent-[#E87722]" /> Lembrar de retornar amanhã às 9h</label>
+            <details className="border-t border-surface-line pt-2">
+              <summary className="text-sm font-semibold text-brand-text cursor-pointer min-h-[40px] inline-flex items-center">Mais detalhes (empresa, CPF/CNPJ, e-mail, responsável...)</summary>
+              <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                <div><label htmlFor="empresa" className="label">Empresa</label><input id="empresa" name="empresa" className="input" /></div>
+                <div><label htmlFor="documento" className="label">CPF ou CNPJ</label><input id="documento" name="documento" inputMode="numeric" className="input" /></div>
+                <div><label htmlFor="email" className="label">E-mail</label><input id="email" name="email" type="email" className="input" /></div>
+                <div><label htmlFor="titulo" className="label">Nome da negociação</label><input id="titulo" name="titulo" className="input" placeholder="Gerado automaticamente" /></div>
+                <div><label htmlFor="qualificacao" className="label">Qualificação</label>
+                  <select id="qualificacao" name="qualificacao" defaultValue="0" className="input">{[0, 1, 2, 3, 4, 5].map((i) => <option key={i} value={i}>{i ? "★".repeat(i) : "Sem qualificação"}</option>)}</select></div>
+                <div><label htmlFor="previsao" className="label">Previsão de fechamento</label><input id="previsao" name="previsao" type="date" className="input" /></div>
+                <div><label htmlFor="responsavelId" className="label">Responsável</label>
+                  <select id="responsavelId" name="responsavelId" defaultValue={user.id} className="input">{usuarios.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div><label htmlFor="loja" className="label">Loja</label>
+                  <select id="loja" name="loja" defaultValue="asfaltomulti" className="input">{LOJAS.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></div>
+              </div>
+            </details>
+            {TZ}
           </ActionForm>
         </section>
       </>
@@ -80,7 +119,7 @@ export default async function Negociacao({ params, searchParams }: { params: { i
 
   return (
     <>
-      <PageHeader title={n.titulo} subtitle={`${brl(n.valor)} · ${nomeLoja(n.loja)}${n.contato ? ` · ${n.contato}` : ""}`}>
+      <PageHeader title={n.titulo} subtitle={`${brl(n.valor)} · ${nomeLoja(n.loja)}${n.contato ? ` · ${n.contato}` : ""}${n.documento ? ` · ${formatarDoc(n.documento)}` : ""}${n.fonte ? ` · ${n.fonte}` : ""}`}>
         <div className="flex flex-wrap items-center gap-2">
           {n.status === "ganha" && <Badge tone="green">Vendida</Badge>}
           {n.status === "perdida" && <Badge tone="red">Perdida: {n.motivoPerda}</Badge>}

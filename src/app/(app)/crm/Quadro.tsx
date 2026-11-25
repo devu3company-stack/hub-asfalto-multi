@@ -55,8 +55,10 @@ export default function Quadro({ colunas: inicial, podeEditar }: { colunas: Colu
             onDragLeave={() => setAlvo((a) => (a === c.id ? null : a))}
             onDrop={() => soltar(c.id)}
             className={`snap-start shrink-0 w-[280px] rounded-2xl p-2 flex flex-col gap-2 ${alvo === c.id ? "bg-[#FDEBDD]" : "bg-[#EFEDEC]"}`}>
-            <header className="px-2 pt-1">
-              <h2 className="font-display font-bold text-sm uppercase tracking-wide text-graphite-dark">{c.nome}</h2>
+            <header className="px-2 pt-1 relative">
+              {podeEditar && <a href={`/crm/nova?etapa=${c.id}`} aria-label={`Novo lead em ${c.nome}`} title="Novo lead nesta etapa"
+                className="absolute right-0 top-0 w-8 h-8 rounded-full hover:bg-white text-graphite text-xl leading-none flex items-center justify-center">+</a>}
+              <h2 className="font-display font-bold text-sm uppercase tracking-wide text-graphite-dark pr-8">{c.nome}</h2>
               <p className="text-xs text-graphite">{c.cards.length} negociação(ões) · {brl(total)}</p>
             </header>
             <ul className="flex flex-col gap-2 min-h-[60px]">

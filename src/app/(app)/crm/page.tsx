@@ -31,7 +31,7 @@ export default async function Crm({ searchParams }: { searchParams: { funil?: st
     <>
       <PageHeader title="Funil de vendas" subtitle="Negociações por etapa. Arraste os cartões para mudar de etapa.">
         <div className="flex flex-wrap gap-2">
-          {editor && <Link href={`/crm/nova?funil=${funilId}`} className="btn-primary">+ Negociação</Link>}
+          {editor && <Link href={`/crm/nova?funil=${funilId}`} className="btn-primary">+ Novo lead</Link>}
           {editor && <Link href="/crm/config" className="btn-outline">Configurar funil</Link>}
         </div>
       </PageHeader>

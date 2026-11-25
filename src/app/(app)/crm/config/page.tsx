@@ -5,7 +5,8 @@ import { db, schema } from "@/lib/db";
 import { garantirFunil, motivosPerda } from "@/lib/crm";
 import { PageHeader } from "@/components/ui";
 import ActionForm from "@/components/ActionForm";
-import { salvarFunil, salvarMotivos } from "../actions";
+import { salvarFunil, salvarLeadAuto, salvarMotivos } from "../actions";
+import { getSetting } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function ConfigCrm() {
   const funis = await garantirFunil();
   const etapas = await Promise.all(funis.map((f) => db.query.crmEtapas.findMany({ where: eq(schema.crmEtapas.funilId, f.id), orderBy: asc(schema.crmEtapas.ordem) })));
   const motivos = await motivosPerda();
+  const leadAuto = (await getSetting("crm.leadAutomatico")) !== "nao";
   return (
     <>
       <PageHeader title="Configurar funil"><Link href="/crm" className="btn-outline h-9 px-4">Voltar ao funil</Link></PageHeader>
@@ -33,6 +35,13 @@ export default async function ConfigCrm() {
           <ActionForm action={salvarFunil} label="Criar funil" reset>
             <div><label htmlFor="nf" className="label">Nome</label><input id="nf" name="nomeFunil" className="input" placeholder="Ex.: Prefeituras e licitações" /></div>
             <div><label htmlFor="ne" className="label">Etapas (uma por linha)</label><textarea id="ne" name="etapas" rows={5} className="input h-auto py-2" placeholder={"Sem contato\nContato feito\nProposta enviada\nFechamento"} /></div>
+          </ActionForm>
+        </section>
+        <section className="card flex flex-col gap-3">
+          <h2 className="font-display font-bold text-lg">Lead automático pelo WhatsApp</h2>
+          <p className="text-sm text-graphite">Quando o cliente manda um CPF ou CNPJ válido numa conversa sem negociação aberta, o Hub cria o lead na primeira etapa do funil principal. Para CNPJ, o nome da empresa vem da Receita.</p>
+          <ActionForm action={salvarLeadAuto} label="Salvar" className="flex flex-wrap items-center gap-3">
+            <select name="ligado" aria-label="Lead automático" defaultValue={leadAuto ? "sim" : "nao"} className="input h-10 w-48"><option value="sim">Ligado</option><option value="nao">Desligado</option></select>
           </ActionForm>
         </section>
         <section className="card flex flex-col gap-3">

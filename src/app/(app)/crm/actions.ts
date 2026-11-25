@@ -8,6 +8,7 @@ import { lojaValida } from "@/lib/lojas";
 import { moverEtapa, registrar, TIPOS_TAREFA } from "@/lib/crm";
 import { numBR } from "@/lib/frete/motor";
 import { setSetting } from "@/lib/settings";
+import { salvarContato } from "@/lib/email/contatos";
 import type { FormMsg } from "@/components/ActionForm";
 
 const N = schema.crmNegociacoes, T = schema.crmTarefas, E = schema.crmEtapas;
@@ -20,7 +21,8 @@ function dados(f: FormData) {
   const valor = numBR(txt(f, "valor") || "0");
   return {
     titulo: txt(f, "titulo"), contato: txt(f, "contato") || null, empresa: txt(f, "empresa") || null,
-    telefone: txt(f, "telefone").replace(/\D/g, "") || null, email: txt(f, "email").toLowerCase() || null,
+    telefone: txt(f, "telefone").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "") || null,
+    documento: txt(f, "documento").replace(/\D/g, "") || null, email: txt(f, "email").toLowerCase() || null,
     valor: Number.isFinite(valor) ? valor : 0, qualificacao: Math.max(0, Math.min(5, Number(txt(f, "qualificacao")) || 0)),
     fonte: txt(f, "fonte") || null, loja: lojaValida(txt(f, "loja")),
     previsaoFechamento: dataBR(txt(f, "previsao"), Number(txt(f, "tz")) || 180),
@@ -31,13 +33,23 @@ function dados(f: FormData) {
 export async function criarNegociacao(_p: FormMsg, f: FormData): Promise<FormMsg> {
   const u = await editar();
   const d = dados(f);
-  if (!d.titulo) return { ok: false, message: "Dê um nome para a negociação (ex.: 40 sacos — Construtora X)." };
+  if (!d.contato && !d.empresa && !d.telefone && !d.titulo) return { ok: false, message: "Informe pelo menos o nome ou o telefone do lead." };
+  const interesse = txt(f, "interesse");
+  if (!d.titulo) d.titulo = `${d.empresa || d.contato || d.telefone}${interesse ? ` — ${interesse.split("\n")[0].slice(0, 50)}` : ""}`;
   const etapaId = txt(f, "etapaId");
   const etapa = await db.query.crmEtapas.findFirst({ where: eq(E.id, etapaId) });
   if (!etapa) return { ok: false, message: "Escolha a etapa." };
   const [{ m }] = await db.select({ m: max(N.ordem) }).from(N).where(eq(N.etapaId, etapaId));
   const [n] = await db.insert(N).values({ ...d, responsavelId: d.responsavelId ?? u.id, funilId: etapa.funilId, etapaId, ordem: (m ?? 0) + 1 }).returning({ id: N.id });
-  await registrar(n.id, u.id, "criada", `Negociação criada em "${etapa.nome}"`);
+  await registrar(n.id, u.id, "criada", `Lead cadastrado manualmente${d.fonte ? ` (origem: ${d.fonte})` : ""} em "${etapa.nome}"`);
+  if (interesse) await registrar(n.id, u.id, "nota", interesse);
+  if (txt(f, "retorno") === "1") {
+    const amanha = new Date(Date.now() + 24 * 3600_000);
+    const quando = new Date(`${new Date(amanha.getTime() - 3 * 3600_000).toISOString().slice(0, 10)}T12:00:00Z`); // 9h de Brasília
+    await db.insert(schema.crmTarefas).values({ negociacaoId: n.id, tipo: d.fonte === "WhatsApp" ? "whatsapp" : "ligacao",
+      descricao: "Retornar o contato", quando, responsavelId: d.responsavelId ?? u.id });
+  }
+  if (d.email) await salvarContato({ email: d.email, nome: d.contato, telefone: d.telefone, origem: "manual", loja: d.loja }).catch(() => null);
   await audit(u.id, "crm.criar", d.titulo);
   revalidatePath("/crm");
   redirect(`/crm/${n.id}`);
@@ -161,6 +173,13 @@ export async function salvarFunil(_p: FormMsg, f: FormData): Promise<FormMsg> {
   return bloqueadas.length
     ? { ok: false, message: `Salvo, mas estas etapas têm negociações e continuam no fim do funil: ${bloqueadas.join(", ")}. Mova as negociações e salve de novo.` }
     : { ok: true, message: "Funil salvo." };
+}
+
+export async function salvarLeadAuto(_p: FormMsg, f: FormData): Promise<FormMsg> {
+  await editar();
+  await setSetting("crm.leadAutomatico", f.get("ligado") === "sim" ? "sim" : "nao");
+  revalidatePath("/crm/config");
+  return { ok: true, message: "Salvo." };
 }
 
 export async function salvarMotivos(_p: FormMsg, f: FormData): Promise<FormMsg> {

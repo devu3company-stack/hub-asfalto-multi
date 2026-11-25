@@ -7,6 +7,7 @@ import { AI_PROVIDERS, replyAsAgent, type AiProvider } from "../ai";
 import { qrSend } from "./gateway";
 import { contextoIA } from "../ia-contexto";
 import { oficialSend } from "./oficial";
+import { leadDoWhatsApp } from "../crm";
 import { rotuloMidia, salvarMidia, type Midia } from "./midia";
 
 export type Channel = "qr" | "oficial";
@@ -89,6 +90,7 @@ export async function handleIncoming(m: Incoming) {
     .onConflictDoNothing().returning({ id: M.id });
   if (!inserted.length) return;
   await touchChat(m.chat, m.channel, f.text, m.name);
+  if (m.text) leadDoWhatsApp({ chat: m.chat, nome: m.name, texto: m.text }).catch((e) => console.error("lead:", e instanceof Error ? e.message : e));
 
   replyWithAI(m.chat, m.channel).catch((e) => console.error("IA:", e instanceof Error ? e.message : e));
 }

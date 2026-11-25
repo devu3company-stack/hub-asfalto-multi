@@ -1,0 +1,1 @@
+ALTER TABLE "crm_negociacoes" ADD COLUMN "documento" text;

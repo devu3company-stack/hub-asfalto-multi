@@ -343,6 +343,7 @@ export const crmNegociacoes = pgTable("crm_negociacoes", {
   contato: text("contato"),
   empresa: text("empresa"),
   telefone: text("telefone"), // só dígitos; liga com a conversa do WhatsApp
+  documento: text("documento"), // CPF/CNPJ só dígitos
   email: text("email"),
   valor: doublePrecision("valor").notNull().default(0),
   qualificacao: integer("qualificacao").notNull().default(0), // 0 a 5 estrelas
