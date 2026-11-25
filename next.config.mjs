@@ -2,7 +2,7 @@
 const nextConfig = {
   output: "standalone",
   poweredByHeader: false,
-  experimental: { serverComponentsExternalPackages: ["postgres", "nodemailer", "exceljs"], instrumentationHook: true },
+  experimental: { serverComponentsExternalPackages: ["postgres", "nodemailer", "exceljs"], instrumentationHook: true, serverActions: { bodySizeLimit: "20mb" } },
   async headers() {
     return [{
       source: "/(.*)",

@@ -16,6 +16,7 @@ import QRCode from "qrcode";
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
@@ -24,6 +25,7 @@ const PORT = Number(process.env.PORT ?? 3100);
 const TOKEN = process.env.WA_GATEWAY_TOKEN ?? "";
 const HUB_WEBHOOK = process.env.HUB_WEBHOOK_URL ?? "";
 const AUTH_DIR = process.env.AUTH_DIR ?? "/data/auth";
+const MAX_MIDIA = 16 * 1024 * 1024;
 
 if (TOKEN.length < 24) {
   console.error("WA_GATEWAY_TOKEN ausente ou curto (mínimo 24 caracteres).");
@@ -95,16 +97,11 @@ async function start() {
       for (const m of messages) {
         const jid = m.key.remoteJid ?? "";
         if (!jid || jid === "status@broadcast" || jid.endsWith("@g.us") || jid.endsWith("@newsletter")) continue;
-        const text =
-          m.message?.conversation ??
-          m.message?.extendedTextMessage?.text ??
-          m.message?.imageMessage?.caption ??
-          m.message?.videoMessage?.caption ??
-          (m.message?.imageMessage ? "[imagem]" :
-           m.message?.audioMessage ? "[áudio]" :
-           m.message?.documentMessage ? `[documento] ${m.message.documentMessage.fileName ?? ""}` :
-           m.message?.stickerMessage ? "[figurinha]" : null);
-        if (!text) continue;
+        const msg = m.message?.ephemeralMessage?.message ?? m.message?.viewOnceMessageV2?.message ?? m.message ?? {};
+        const img = msg.imageMessage, aud = msg.audioMessage, vid = msg.videoMessage, doc = msg.documentMessage ?? msg.documentWithCaptionMessage?.message?.documentMessage, stk = msg.stickerMessage;
+        const midia = img ? ["imagem", img] : aud ? ["audio", aud] : vid ? ["video", vid] : doc ? ["documento", doc] : stk ? ["figurinha", stk] : null;
+        const text = msg.conversation ?? msg.extendedTextMessage?.text ?? img?.caption ?? vid?.caption ?? doc?.caption ?? "";
+        if (!text && !midia) continue;
         const payload = {
           id: m.key.id,
           chat: jid,
@@ -113,6 +110,16 @@ async function start() {
           text,
           timestamp: Number(m.messageTimestamp ?? Date.now() / 1000),
         };
+        if (midia) {
+          const [tipo, info] = midia;
+          payload.media = { tipo, mimetype: info.mimetype ?? "application/octet-stream", fileName: info.fileName ?? null, voz: Boolean(info.ptt) };
+          if (Number(info.fileLength ?? 0) <= MAX_MIDIA) {
+            try {
+              const buf = await downloadMediaMessage({ ...m, message: msg }, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+              payload.media.base64 = buf.toString("base64");
+            } catch (e) { logger.warn({ err: e.message }, "falha ao baixar mídia"); }
+          }
+        }
         fetch(HUB_WEBHOOK, {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gateway-token": TOKEN },
@@ -141,7 +148,7 @@ async function body(req) {
   let raw = "";
   for await (const c of req) {
     raw += c;
-    if (raw.length > 64 * 1024) throw new Error("corpo grande demais");
+    if (raw.length > 30 * 1024 * 1024) throw new Error("arquivo grande demais (máx. 16 MB)");
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -161,10 +168,22 @@ http
 
       if (req.method === "POST" && req.url === "/send") {
         if (state.status !== "conectado" || !sock) return send(res, 409, { error: "WhatsApp não conectado" });
-        const { to, text } = await body(req);
-        if (!to || !text) return send(res, 400, { error: "informe to e text" });
+        const { to, text, media } = await body(req);
+        if (!to || (!text && !media?.base64)) return send(res, 400, { error: "informe to e text ou media" });
         const jid = String(to).includes("@") ? String(to) : toJid(to);
-        const r = await sock.sendMessage(jid, { text: String(text).slice(0, 4096) });
+        const caption = text ? String(text).slice(0, 1024) : undefined;
+        let content;
+        if (media?.base64) {
+          const buf = Buffer.from(media.base64, "base64");
+          const mimetype = media.mimetype || "application/octet-stream";
+          content =
+            media.tipo === "imagem" ? { image: buf, caption, mimetype } :
+            media.tipo === "video" ? { video: buf, caption, mimetype } :
+            media.tipo === "audio" ? { audio: buf, mimetype, ptt: Boolean(media.voz) } :
+            media.tipo === "figurinha" ? { sticker: buf } :
+            { document: buf, mimetype, fileName: media.fileName || "arquivo", caption };
+        } else content = { text: String(text).slice(0, 4096) };
+        const r = await sock.sendMessage(jid, content);
         return send(res, 200, { ok: true, id: r?.key?.id, chat: jid });
       }
 

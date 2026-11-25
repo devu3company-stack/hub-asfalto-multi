@@ -1,4 +1,5 @@
 import "server-only";
+import type { Midia } from "./midia";
 
 /** Conexão por QR code (container whatsapp-gateway, rede interna do Docker). */
 const base = () => (process.env.WA_GATEWAY_URL ?? "http://whatsapp:3100").replace(/\/$/, "");
@@ -21,10 +22,11 @@ export async function qrStatus(): Promise<QrStatus> {
   }
 }
 
-export async function qrSend(to: string, text: string): Promise<{ id?: string }> {
+export async function qrSend(to: string, text: string, midia?: Midia): Promise<{ id?: string }> {
+  const media = midia ? { base64: midia.buffer.toString("base64"), mimetype: midia.mime, fileName: midia.nome, tipo: midia.tipo, voz: midia.voz } : undefined;
   const r = await fetch(base() + "/send", {
     method: "POST", headers: headers(), cache: "no-store",
-    body: JSON.stringify({ to, text }), signal: AbortSignal.timeout(15000),
+    body: JSON.stringify({ to, text, media }), signal: AbortSignal.timeout(midia ? 90000 : 15000),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error ?? `Conexão QR respondeu ${r.status}`);

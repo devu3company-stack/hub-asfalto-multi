@@ -164,6 +164,10 @@ export const waMessages = pgTable("wa_messages", {
   sentBy: text("sent_by").notNull(), // cliente | ia | humano
   userId: text("user_id"),
   text: text("text").notNull(),
+  midia: text("midia"), // nome do arquivo em data/whatsapp
+  midiaTipo: text("midia_tipo"), // imagem | audio | video | documento | figurinha
+  midiaMime: text("midia_mime"),
+  midiaNome: text("midia_nome"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("wa_messages_chat_idx").on(t.chat, t.createdAt)]);
 

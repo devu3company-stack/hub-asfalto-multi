@@ -1,16 +1,13 @@
 import Link from "next/link";
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { requireModule } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { getSetting } from "@/lib/settings";
-import { listIntegrations } from "@/lib/integrations/store";
 import { qrStatus } from "@/lib/whatsapp/gateway";
-import { AI_LABELS, AI_PROVIDERS } from "@/lib/ai";
-import { PageHeader, Badge } from "@/components/ui";
-import QrPanel from "./QrPanel";
 import SendForm from "./SendForm";
-import { alternarIAConversa, desconectarQr, salvarConfig } from "./actions";
+import AoVivo from "./AoVivo";
+import { alternarIAConversa } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,111 +15,79 @@ const fmt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paul
 const showNumber = (chat: string) => (/^\d+$/.test(chat) ? `+${chat}` : chat);
 
 import { negociacoesDoTelefone } from "@/lib/crm";
+import { rotuloMidia, type TipoMidia } from "@/lib/whatsapp/midia";
 
-export default async function WhatsApp({ searchParams }: { searchParams: { chat?: string } }) {
+type Msg = typeof schema.waMessages.$inferSelect;
+const rotulo = (m: Msg) => (m.midiaTipo ? rotuloMidia(m.midiaTipo as TipoMidia, m.midiaNome) : "");
+
+function Midia({ m }: { m: Msg }) {
+  const url = `/api/whatsapp/midia/${m.midia}`;
+  switch (m.midiaTipo) {
+    case "imagem":
+    case "figurinha":
+      return (
+        <a href={url} target="_blank" rel="noopener" className="block mb-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={m.midiaTipo === "imagem" ? "Foto" : "Figurinha"}
+            className={m.midiaTipo === "imagem" ? "rounded-xl max-h-80 w-auto max-w-full" : "w-32 h-32 object-contain"} />
+        </a>
+      );
+    case "audio":
+      return <audio src={url} controls preload="none" className="max-w-full w-72 h-10 mb-1" />;
+    case "video":
+      return <video src={url} controls preload="metadata" className="rounded-xl max-h-80 max-w-full mb-1" />;
+    default:
+      return (
+        <a href={`${url}?baixar`} className="flex items-center gap-2 p-2 mb-1 rounded-xl bg-black/5 hover:bg-black/10">
+          <span aria-hidden className="text-2xl">📄</span>
+          <span className="min-w-0"><span className="block font-semibold truncate">{m.midiaNome ?? "Documento"}</span><span className="text-xs text-graphite-muted">Baixar</span></span>
+        </a>
+      );
+  }
+}
+
+export default async function WhatsApp({ searchParams }: { searchParams: { chat?: string; numero?: string } }) {
   const user = await requireModule("whatsapp");
   const admin = can(user.role, "integracoes", "edit");
   const editor = can(user.role, "whatsapp", "edit");
 
-  const [qr, canal, iaLigada, instrucoes, provedor, integ, chats] = await Promise.all([
+  const [qr, canal, iaLigada, chats] = await Promise.all([
     qrStatus(),
     getSetting("whatsapp.canal"),
     getSetting("ia.ligada"),
-    getSetting("ia.instrucoes"),
-    getSetting("ia.provedor"),
-    listIntegrations(),
-    db.query.waChats.findMany({ orderBy: desc(schema.waChats.lastAt), limit: 50 }),
+    db.query.waChats.findMany({ orderBy: desc(schema.waChats.lastAt), limit: 100 }),
   ]);
-  const oficial = integ.find((i) => i.provider === "whatsapp_oficial");
-  const ia = integ.find((i) => i.provider === provedor);
+  // Número aberto a partir do funil de vendas, sem conversa ainda.
+  const numeroNovo = searchParams.chat && /^\d{10,13}$/.test(searchParams.chat) && !chats.some((c) => c.chat === searchParams.chat) ? searchParams.chat : null;
+  if (numeroNovo) searchParams = { chat: "novo", numero: numeroNovo };
+  const conectado = canal === "oficial" || qr.status === "conectado";
 
   const selected = searchParams.chat ? chats.find((c) => c.chat === searchParams.chat) : undefined;
   const negs = selected ? await negociacoesDoTelefone(selected.chat) : [];
   const msgs = selected
-    ? await db.query.waMessages.findMany({ where: eq(schema.waMessages.chat, selected.chat), orderBy: asc(schema.waMessages.createdAt), limit: 200 })
+    ? (await db.query.waMessages.findMany({ where: eq(schema.waMessages.chat, selected.chat), orderBy: desc(schema.waMessages.createdAt), limit: 300 })).reverse()
     : [];
 
   return (
     <>
-      <PageHeader title="WhatsApp" subtitle="Conexão por QR code ou API oficial, atendente com IA e conversas." />
-
-      <div className="grid lg:grid-cols-3 gap-4">
-        <section className="card flex flex-col gap-3 lg:col-span-2">
-          <h2 className="font-display font-bold text-lg">Conexão por QR code</h2>
-          <QrPanel initial={qr}>
-            {admin && (
-              <form action={desconectarQr}>
-                <button className="text-sm font-semibold text-[#A0261C]">Desconectar este número</button>
-              </form>
-            )}
-          </QrPanel>
-        </section>
-
-        <section className="card flex flex-col gap-3">
-          <h2 className="font-display font-bold text-lg">API oficial (Meta)</h2>
-          <div>
-            {oficial ? (
-              oficial.status === "ok" ? <Badge tone="green">Conectada</Badge> : oficial.status === "erro" ? <Badge tone="red">Com erro</Badge> : <Badge tone="orange">Não testada</Badge>
-            ) : (
-              <Badge tone="gray">Não configurada</Badge>
-            )}
-          </div>
-          <p className="text-sm text-graphite-muted">Mais estável e sem risco de bloqueio do número. Mensagens que a empresa inicia precisam de template aprovado.</p>
-          {admin && <Link href="/integracoes" className="text-sm font-semibold text-brand-text">Configurar em Integrações</Link>}
-        </section>
-      </div>
-
-      {admin && (
-        <section className="card flex flex-col gap-4">
-          <h2 className="font-display font-bold text-lg">Envio e atendente com IA</h2>
-          <form action={salvarConfig} className="flex flex-col gap-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="canal" className="label">Canal usado para enviar</label>
-                <select id="canal" name="canal" defaultValue={canal} className="input">
-                  <option value="qr">QR code</option>
-                  <option value="oficial">API oficial</option>
-                </select>
-                <p className="text-xs text-graphite-muted mt-1">A IA sempre responde pelo mesmo canal em que o cliente escreveu.</p>
-              </div>
-              <div>
-                <label htmlFor="provedor" className="label">IA que responde</label>
-                <select id="provedor" name="provedor" defaultValue={provedor} className="input">
-                  {AI_PROVIDERS.map((p) => {
-                    const row = integ.find((i) => i.provider === p);
-                    return (
-                      <option key={p} value={p}>
-                        {AI_LABELS[p]}{row ? (row.status === "ok" ? " · conectada" : row.status === "erro" ? " · com erro" : " · não testada") : " · não configurada"}
-                      </option>
-                    );
-                  })}
-                </select>
-                {!ia && <p className="text-xs text-[#A0261C] mt-1">Esta IA ainda não foi configurada em Integrações.</p>}
-              </div>
-              <label className="flex items-center gap-2 text-sm font-medium min-h-[44px] sm:col-span-2">
-                <input type="checkbox" name="ia" defaultChecked={iaLigada === "sim"} className="w-5 h-5 accent-[#C25A14]" />
-                Atendente com IA ligado
-              </label>
-            </div>
-            <div>
-              <label htmlFor="instrucoes" className="label">Instruções do atendente</label>
-              <textarea id="instrucoes" name="instrucoes" rows={6} defaultValue={instrucoes} className="input h-auto py-3 text-sm" />
-              <p className="text-xs text-graphite-muted mt-1">Diga quem é a empresa, o que vende, como falar e o que nunca prometer. Quando não souber, a IA passa a conversa para um atendente e para de responder ali.</p>
-            </div>
-            <div><button className="btn-primary">Salvar</button></div>
-          </form>
-        </section>
-      )}
-
-      <section className="card p-0 overflow-hidden">
-        <div className="flex flex-col lg:flex-row min-h-[480px]">
-          <aside className={`lg:w-[320px] lg:border-r border-surface-line ${selected ? "hidden lg:block" : ""}`}>
-            <div className="p-4 border-b border-surface-line flex items-center justify-between">
+      <h1 className="sr-only">WhatsApp</h1>
+      <AoVivo chave={selected?.chat ?? ""} ultima={msgs[msgs.length - 1]?.id ?? ""} />
+      <section className="-mx-4 -mt-5 -mb-24 lg:-mx-9 lg:-my-7 bg-white overflow-hidden h-[calc(100dvh-143px-env(safe-area-inset-bottom))] lg:h-[100dvh]">
+        <div className="flex h-full">
+          <aside className={`w-full lg:w-[340px] shrink-0 lg:border-r border-surface-line flex flex-col min-h-0 ${selected || searchParams.chat === "novo" ? "hidden lg:flex" : "flex"}`}>
+            <div className="px-4 h-16 shrink-0 border-b border-surface-line flex items-center justify-between gap-2">
               <h2 className="font-display font-bold text-lg">Conversas</h2>
-              {editor && <Link href="/whatsapp?chat=novo" className="text-sm font-semibold text-brand-text">Nova</Link>}
+              <div className="flex items-center gap-1">
+                {admin && <Link href="/whatsapp/config" className="text-xs font-semibold px-2.5 h-9 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-surface-line hover:bg-surface"
+                  title="Configurar conexão e atendente com IA" aria-label={`Configurar WhatsApp (${conectado ? "conectado" : "desconectado"})`}>
+                  <span className={`w-2 h-2 rounded-full ${conectado ? "bg-[#1E8A44]" : "bg-[#D0342C]"}`} />{conectado ? (iaLigada === "sim" ? "IA ligada" : "Conectado") : "Desconectado"}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" /></svg></Link>}
+                {editor && <Link href="/whatsapp?chat=novo" className="btn-primary h-9 px-3 text-sm">Nova</Link>}
+              </div>
             </div>
+            {!admin && !conectado && <p className="px-4 py-2 text-xs bg-[#FDE2DF] text-[#A0261C]">WhatsApp desconectado. Avise um administrador.</p>}
             {chats.length === 0 && <p className="p-4 text-sm text-graphite-muted">Nenhuma conversa ainda.</p>}
-            <ul>
+            <ul className="flex-1 overflow-y-auto">
               {chats.map((c) => (
                 <li key={c.chat}>
                   <Link href={`/whatsapp?chat=${encodeURIComponent(c.chat)}`}
@@ -142,46 +107,49 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
             </ul>
           </aside>
 
-          <div className={`flex-1 min-w-0 flex flex-col ${!selected && searchParams.chat !== "novo" ? "hidden lg:flex" : ""}`}>
+          <div className={`flex-1 min-w-0 min-h-0 flex-col ${!selected && searchParams.chat !== "novo" ? "hidden lg:flex" : "flex"}`}>
             {searchParams.chat === "novo" ? (
               <div className="p-5 flex flex-col gap-3">
                 <Link href="/whatsapp" className="lg:hidden text-sm text-brand-text font-semibold">← Conversas</Link>
                 <h2 className="font-display font-bold text-lg">Nova mensagem</h2>
-                <SendForm />
+                <SendForm numero={searchParams.numero} />
               </div>
             ) : selected ? (
               <>
-                <div className="p-4 border-b border-surface-line flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <Link href="/whatsapp" className="lg:hidden text-sm text-brand-text font-semibold">← Conversas</Link>
-                    <p className="font-semibold">{selected.name ?? showNumber(selected.chat)}</p>
-                    <p className="text-xs text-graphite-muted">{showNumber(selected.chat)}</p>
+                <div className="px-4 py-2 min-h-16 shrink-0 border-b border-surface-line flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Link href="/whatsapp" aria-label="Voltar às conversas" className="lg:hidden w-9 h-9 -ml-2 flex items-center justify-center text-xl text-brand-text">←</Link>
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{selected.name ?? showNumber(selected.chat)}</p>
+                      <p className="text-xs text-graphite-muted">{showNumber(selected.chat)}{selected.aiPaused ? " · atendimento humano" : iaLigada === "sim" ? " · IA respondendo" : ""}</p>
+                    </div>
                   </div>
                   {editor && (
                     <div className="flex flex-wrap gap-2">
                     {negs.length
-                      ? negs.map((g) => <Link key={g.id} href={`/crm/${g.id}`} className="btn-outline h-10">Negociação: {g.titulo.slice(0, 30)}</Link>)
-                      : <Link href={`/crm/nova?nome=${encodeURIComponent(selected.name ?? "")}&tel=${selected.chat.replace(/^55(?=\d{10,11}$)/, "")}`} className="btn-outline h-10">Criar negociação</Link>}
+                      ? negs.map((g) => <Link key={g.id} href={`/crm/${g.id}`} className="btn-outline h-9 px-3 text-sm">Negociação: {g.titulo.slice(0, 24)}</Link>)
+                      : <Link href={`/crm/nova?nome=${encodeURIComponent(selected.name ?? "")}&tel=${selected.chat.replace(/^55(?=\d{10,11}$)/, "")}`} className="btn-outline h-9 px-3 text-sm">Criar negociação</Link>}
                     <form action={alternarIAConversa}>
                       <input type="hidden" name="chat" value={selected.chat} />
                       <input type="hidden" name="pausar" value={selected.aiPaused ? "0" : "1"} />
-                      <button className="btn-outline h-10">{selected.aiPaused ? "Devolver para a IA" : "Assumir atendimento"}</button>
+                      <button className="btn-outline h-9 px-3 text-sm">{selected.aiPaused ? "Devolver para a IA" : "Assumir atendimento"}</button>
                     </form>
                     </div>
                   )}
                 </div>
-                <ol className="flex-1 p-4 flex flex-col gap-2 overflow-y-auto max-h-[520px] bg-[#F8F7F6]">
+                <ol id="wa-msgs" className="flex-1 min-h-0 p-4 lg:px-8 flex flex-col gap-2 overflow-y-auto bg-[#F4F1EE]">
                   {msgs.map((m) => (
-                    <li key={m.id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.fromMe ? "self-end bg-[#FDEBDD]" : "self-start bg-white border border-surface-line"}`}>
-                      <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                    <li key={m.id} className={`max-w-[85%] lg:max-w-[65%] rounded-2xl px-3 py-2 text-sm shadow-sm ${m.fromMe ? "self-end bg-[#FDEBDD]" : "self-start bg-white"}`}>
+                      {m.midia && <Midia m={m} />}
+                      {(!m.midia || m.text !== rotulo(m)) && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
                       <p className="text-[11px] text-graphite-muted mt-1">{m.sentBy === "ia" ? "IA · " : m.sentBy === "humano" ? "Atendente · " : ""}{fmt(m.createdAt)}</p>
                     </li>
                   ))}
                 </ol>
-                {editor && <div className="p-4 border-t border-surface-line"><SendForm chat={selected.chat} /></div>}
+                {editor && <div className="px-3 py-2 lg:px-6 shrink-0 border-t border-surface-line bg-white"><SendForm key={selected.chat} chat={selected.chat} /></div>}
               </>
             ) : (
-              <p className="p-6 text-sm text-graphite-muted">Escolha uma conversa.</p>
+              <div className="flex-1 flex items-center justify-center bg-[#F4F1EE]"><p className="text-sm text-graphite-muted">Escolha uma conversa à esquerda.</p></div>
             )}
           </div>
         </div>

@@ -5,6 +5,7 @@ import { setSetting } from "@/lib/settings";
 import { AI_PROVIDERS } from "@/lib/ai";
 import { qrLogout } from "@/lib/whatsapp/gateway";
 import { chatKey, sendMessage, setAiPaused } from "@/lib/whatsapp/service";
+import { MAX_MIDIA, paraVozWhatsApp, tipoDoMime, type Midia } from "@/lib/whatsapp/midia";
 
 export type SendState = { ok?: boolean; message?: string } | undefined;
 
@@ -12,9 +13,21 @@ export async function enviar(_p: SendState, form: FormData): Promise<SendState> 
   const u = await requireModule("whatsapp", "edit");
   const chat = chatKey(String(form.get("chat") ?? ""));
   const text = String(form.get("text") ?? "").trim();
-  if (!chat || !text) return { ok: false, message: "Informe o número e a mensagem." };
+  const arq = form.get("arquivo");
+  const temArquivo = arq instanceof File && arq.size > 0;
+  if (!chat || (!text && !temArquivo)) return { ok: false, message: "Escreva a mensagem ou anexe um arquivo." };
   try {
-    await sendMessage(chat, text, "humano", { userId: u.id });
+    let midia: Midia | undefined;
+    if (temArquivo) {
+      if (arq.size > MAX_MIDIA) return { ok: false, message: "Arquivo grande demais (máximo 16 MB)." };
+      const mime = arq.type || "application/octet-stream";
+      midia = { buffer: Buffer.from(await arq.arrayBuffer()), mime, nome: arq.name, tipo: tipoDoMime(mime) };
+      // Áudio gravado aqui vira mensagem de voz; figurinha só se vier do WhatsApp.
+      if (form.get("voz") === "1") midia = await paraVozWhatsApp(midia);
+      else if (midia.tipo === "figurinha") midia.tipo = "imagem";
+      else if (midia.tipo === "video" && !/mp4|3gpp/.test(mime)) midia.tipo = "documento";
+    }
+    await sendMessage(chat, text, "humano", { userId: u.id, midia });
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Falha ao enviar." };
   }

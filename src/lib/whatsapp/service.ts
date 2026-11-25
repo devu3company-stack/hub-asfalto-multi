@@ -7,6 +7,7 @@ import { AI_PROVIDERS, replyAsAgent, type AiProvider } from "../ai";
 import { qrSend } from "./gateway";
 import { contextoIA } from "../ia-contexto";
 import { oficialSend } from "./oficial";
+import { rotuloMidia, salvarMidia, type Midia } from "./midia";
 
 export type Channel = "qr" | "oficial";
 const M = schema.waMessages;
@@ -32,7 +33,7 @@ export async function setAiPaused(chat: string, paused: boolean) {
 }
 
 /** Envia uma mensagem pelo canal escolhido e registra no histórico. */
-export async function sendMessage(chat: string, text: string, sentBy: "ia" | "humano", opts: { channel?: Channel; userId?: string } = {}) {
+export async function sendMessage(chat: string, text: string, sentBy: "ia" | "humano", opts: { channel?: Channel; userId?: string; midia?: Midia } = {}) {
   // Responde pelo canal da conversa; conversa nova usa o canal escolhido na tela WhatsApp.
   const existing = opts.channel ? null : await db.query.waChats.findFirst({ where: eq(C.chat, chat) });
   const channel = opts.channel ?? (existing?.channel as Channel | undefined) ?? ((await getSetting("whatsapp.canal")) as Channel);
@@ -40,38 +41,54 @@ export async function sendMessage(chat: string, text: string, sentBy: "ia" | "hu
   if (channel === "oficial") {
     const cfg = await getConfig("whatsapp_oficial");
     if (!cfg) throw new Error("API oficial não configurada na aba Integrações.");
-    const r = await oficialSend(cfg, chat, text);
+    const r = await oficialSend(cfg, chat, text, opts.midia);
     id = r.id ? `of_${r.id}` : undefined;
   } else {
-    const r = await qrSend(chat, text);
+    const r = await qrSend(chat, text, opts.midia);
     id = r.id ? `qr_${r.id}` : undefined;
   }
-  await db.insert(M).values({ ...(id ? { id } : {}), chat, channel, fromMe: true, sentBy, userId: opts.userId ?? null, text })
+  const m = opts.midia;
+  const arquivo = m ? await salvarMidia(m) : null;
+  const texto = text || (m ? rotuloMidia(m.tipo, m.nome) : "");
+  await db.insert(M).values({ ...(id ? { id } : {}), chat, channel, fromMe: true, sentBy, userId: opts.userId ?? null, text: texto,
+    ...(m ? { midia: arquivo, midiaTipo: m.tipo, midiaMime: m.mime, midiaNome: m.nome ?? null } : {}) })
     .onConflictDoNothing();
-  await touchChat(chat, channel, text);
+  await touchChat(chat, channel, texto);
   // Atendente humano assumiu: a IA para de responder nesta conversa.
   if (sentBy === "humano") await setAiPaused(chat, true);
 }
 
-type Incoming = { id?: string; chat: string; channel: Channel; fromMe: boolean; name?: string | null; text: string };
+type Incoming = { id?: string; chat: string; channel: Channel; fromMe: boolean; name?: string | null; text: string; midia?: Midia | null; midiaFalhou?: { tipo: Midia["tipo"]; nome?: string | null } };
+
+async function camposMidia(m: Incoming) {
+  if (m.midia) {
+    const arquivo = await salvarMidia(m.midia);
+    return { text: m.text || rotuloMidia(m.midia.tipo, m.midia.nome), extra: { midia: arquivo, midiaTipo: m.midia.tipo, midiaMime: m.midia.mime, midiaNome: m.midia.nome ?? null } };
+  }
+  if (m.midiaFalhou) return { text: m.text || `${rotuloMidia(m.midiaFalhou.tipo, m.midiaFalhou.nome)} (abra no celular)`, extra: {} };
+  return { text: m.text, extra: {} };
+}
 
 /** Mensagem que chegou (cliente) ou que foi enviada direto pelo celular (fromMe). */
 export async function handleIncoming(m: Incoming) {
   if (m.fromMe) {
     // Já registrada pelo hub? Então é eco do envio; nada a fazer.
     if (m.id && (await db.query.waMessages.findFirst({ where: eq(M.id, m.id) }))) return;
-    await db.insert(M).values({ ...(m.id ? { id: m.id } : {}), chat: m.chat, channel: m.channel, fromMe: true, sentBy: "humano", text: m.text })
+    const f = await camposMidia(m);
+    await db.insert(M).values({ ...(m.id ? { id: m.id } : {}), chat: m.chat, channel: m.channel, fromMe: true, sentBy: "humano", text: f.text, ...f.extra })
       .onConflictDoNothing();
-    await touchChat(m.chat, m.channel, m.text);
+    await touchChat(m.chat, m.channel, f.text);
     await setAiPaused(m.chat, true); // respondeu pelo celular = humano assumiu
     return;
   }
 
+  if (m.id && (await db.query.waMessages.findFirst({ where: eq(M.id, m.id) }))) return; // repetida (a Meta reenvia avisos)
+  const f = await camposMidia(m);
   const inserted = await db.insert(M)
-    .values({ ...(m.id ? { id: m.id } : {}), chat: m.chat, channel: m.channel, fromMe: false, sentBy: "cliente", text: m.text })
+    .values({ ...(m.id ? { id: m.id } : {}), chat: m.chat, channel: m.channel, fromMe: false, sentBy: "cliente", text: f.text, ...f.extra })
     .onConflictDoNothing().returning({ id: M.id });
-  if (!inserted.length) return; // repetida (a Meta reenvia avisos)
-  await touchChat(m.chat, m.channel, m.text, m.name);
+  if (!inserted.length) return;
+  await touchChat(m.chat, m.channel, f.text, m.name);
 
   replyWithAI(m.chat, m.channel).catch((e) => console.error("IA:", e instanceof Error ? e.message : e));
 }
