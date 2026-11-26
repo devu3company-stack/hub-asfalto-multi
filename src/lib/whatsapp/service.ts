@@ -99,15 +99,15 @@ export async function handleIncoming(m: Incoming) {
   // O lead por CPF/CNPJ funciona em todos os números; o lead fica com o dono do número.
   if (m.text) leadDoWhatsApp({ chat: m.chat, nome: m.name, texto: m.text, responsavelId: cx.userId }).catch((e) => console.error("lead:", e instanceof Error ? e.message : e));
 
-  // IA e automações só respondem nos números em que foram ligadas.
-  if (!cx.iaLigada) return;
-
-  // "SAIR": não recebe mais mensagens de follow-up e remarketing.
-  if (/^\s*(sair|parar|pare|stop|não quero mais|nao quero mais)\s*[.!]*\s*$/i.test(m.text)) {
+  // "SAIR" vale em qualquer número: não recebe mais disparos, follow-up nem remarketing.
+  if (/^\s*(sair|parar|pare|stop|não quero mais|nao quero mais|descadastrar)\s*[.!]*\s*$/i.test(m.text)) {
     await db.update(C).set({ optout: true }).where(eq(C.chat, m.chat));
-    await sendMessage(m.chat, "Tudo bem! Você não vai mais receber nossas mensagens automáticas. Se precisar, é só chamar aqui. 🙂", "auto", { conexao: m.conexaoId });
+    await sendMessage(m.chat, "Tudo bem! Você não vai mais receber nossas mensagens automáticas. Se precisar, é só chamar aqui. 🙂", "auto", { conexao: m.conexaoId }).catch(() => null);
     return;
   }
+
+  // IA e automações só respondem nos números em que foram ligadas.
+  if (!cx.iaLigada) return;
 
   // Automações por palavra-chave respondem primeiro; se alguma pegou a mensagem, a IA não responde em cima.
   const pegou = await disparar("whatsapp.mensagem", { chat: m.chat, telefone: m.chat, conexao: m.conexaoId, vendedorId: cx.userId, nome: m.name ?? null, texto: m.text }, inserted[0].id)

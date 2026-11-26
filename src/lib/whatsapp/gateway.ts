@@ -53,6 +53,15 @@ export async function qrSend(conexao: string, to: string, text: string, midia?: 
   return data;
 }
 
+/** Confere se o número tem WhatsApp. Na dúvida (erro), considera que tem. */
+export async function qrCheck(conexao: string, numero: string) {
+  try {
+    const r = await fetch(url(conexao, "check"), { method: "POST", headers: headers(), cache: "no-store", body: JSON.stringify({ number: numero }), signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return true;
+    return Boolean((await r.json()).exists);
+  } catch { return true; }
+}
+
 export async function qrLogout(conexao: string) {
   await fetch(url(conexao, "logout"), { method: "POST", headers: headers(), cache: "no-store", signal: AbortSignal.timeout(10000) });
 }

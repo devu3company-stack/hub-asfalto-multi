@@ -85,6 +85,13 @@
       "when": 1795650541862,
       "tag": "0011_whatsapp_por_usuario",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795655824694,
+      "tag": "0012_disparos",
+      "breakpoints": true
     }
   ]
 }

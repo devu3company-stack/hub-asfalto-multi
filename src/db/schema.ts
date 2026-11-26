@@ -2,7 +2,7 @@ import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, prima
 import { relations } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
-export const roleEnum = pgEnum("role", ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO", "LOGISTICA"]);
+export const roleEnum = pgEnum("role", ["ADMIN", "FINANCEIRO", "COMERCIAL", "ATENDIMENTO", "LOGISTICA", "MARKETING"]);
 
 const id = () => text("id").primaryKey().$defaultFn(() => createId());
 
@@ -536,3 +536,47 @@ export const automacaoExecucoesRelations = relations(automacaoExecucoes, ({ one 
 export const automacaoAprovacoesRelations = relations(automacaoAprovacoes, ({ one }) => ({
   automacao: one(automacoes, { fields: [automacaoAprovacoes.automacaoId], references: [automacoes.id] }),
 }));
+
+// ───────── Disparos em massa pelo WhatsApp ─────────
+
+export const disparos = pgTable("disparos", {
+  id: id(),
+  nome: text("nome").notNull(),
+  status: text("status").notNull().default("rascunho"), // rascunho | enviando | pausado | concluido | cancelado
+  motivoPausa: text("motivo_pausa"),
+  mensagens: jsonb("mensagens").$type<string[]>().notNull().default([]), // variações (sorteia uma por contato)
+  midia: text("midia"),
+  midiaTipo: text("midia_tipo"),
+  midiaMime: text("midia_mime"),
+  midiaNome: text("midia_nome"),
+  rodapeSair: boolean("rodape_sair").notNull().default(true),
+  conexoes: text("conexoes").array().notNull().default([]), // números que disparam (revezando)
+  intervaloMin: integer("intervalo_min").notNull().default(40), // segundos entre mensagens, por número
+  intervaloMax: integer("intervalo_max").notNull().default(90),
+  loteTamanho: integer("lote_tamanho").notNull().default(20), // depois de X mensagens...
+  lotePausa: integer("lote_pausa").notNull().default(15), // ...pausa de Y minutos
+  limiteDia: integer("limite_dia").notNull().default(150), // por número, somando todos os disparos
+  janelaInicio: integer("janela_inicio").notNull().default(9),
+  janelaFim: integer("janela_fim").notNull().default(19),
+  sabado: boolean("sabado").notNull().default(true),
+  domingo: boolean("domingo").notNull().default(false),
+  conferirNumero: boolean("conferir_numero").notNull().default(true), // confere se o número tem WhatsApp antes
+  inicioEm: timestamp("inicio_em", { withTimezone: true }),
+  criadoPor: text("criado_por").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const disparoContatos = pgTable("disparo_contatos", {
+  id: id(),
+  disparoId: text("disparo_id").notNull().references(() => disparos.id, { onDelete: "cascade" }),
+  telefone: text("telefone").notNull(), // 55 + DDD + número
+  nome: text("nome"),
+  empresa: text("empresa"),
+  vars: jsonb("vars").$type<Record<string, string>>().notNull().default({}),
+  status: text("status").notNull().default("pendente"), // pendente | enviando | enviado | falhou | pulado
+  conexaoId: text("conexao_id"),
+  erro: text("erro"),
+  enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+  ordem: integer("ordem").notNull().default(0),
+}, (t) => [uniqueIndex("disparo_contato_uq").on(t.disparoId, t.telefone), index("disparo_contato_fila_idx").on(t.disparoId, t.status, t.ordem)]);

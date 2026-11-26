@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "FINANCEIRO" | "COMERCIAL" | "ATENDIMENTO" | "LOGISTICA";
+export type Role = "ADMIN" | "FINANCEIRO" | "COMERCIAL" | "ATENDIMENTO" | "LOGISTICA" | "MARKETING";
 export type Access = "none" | "view" | "edit";
 
 export const MODULES = [
@@ -11,6 +11,7 @@ export const MODULES = [
   { key: "fretes", label: "Fretes", href: "/fretes" },
   { key: "entregas", label: "Entregas", href: "/entregas" },
   { key: "automacoes", label: "Automações", href: "/automacoes" },
+  { key: "disparos", label: "Disparos em massa", href: "/disparos" },
   { key: "email", label: "E-mail marketing", href: "/email" },
   { key: "manuais", label: "Manuais", href: "/manuais" },
   { key: "whatsapp", label: "WhatsApp", href: "/whatsapp" },
@@ -26,28 +27,33 @@ export const ROLE_LABELS: Record<Role, string> = {
   COMERCIAL: "Comercial",
   ATENDIMENTO: "Atendimento",
   LOGISTICA: "Logística",
+  MARKETING: "Marketing",
 };
 
 /** Matriz de permissões por perfil. Ajuste aqui para mudar o que cada perfil vê. */
 export const PERMISSIONS: Record<Role, Record<ModuleKey, Access>> = {
   ADMIN: {
-    painel: "edit", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", entregas: "edit", automacoes: "edit", email: "edit",
+    painel: "edit", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "edit", financeiro: "edit", fretes: "edit", entregas: "edit", automacoes: "edit", disparos: "edit", email: "edit",
     manuais: "edit", whatsapp: "edit", integracoes: "edit", usuarios: "edit",
   },
   FINANCEIRO: {
-    painel: "view", crm: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", entregas: "view", automacoes: "none", email: "none",
+    painel: "view", crm: "view", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "edit", fretes: "view", entregas: "view", automacoes: "none", disparos: "none", email: "none",
     manuais: "view", whatsapp: "none", integracoes: "none", usuarios: "none",
   },
   COMERCIAL: {
-    painel: "view", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "edit", email: "edit",
+    painel: "view", crm: "edit", pedidos: "edit", estoque: "edit", relatorios: "view", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "edit", disparos: "none", email: "edit",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
   ATENDIMENTO: {
-    painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "view", automacoes: "view", email: "none",
+    painel: "none", crm: "edit", pedidos: "view", estoque: "view", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "view", automacoes: "view", disparos: "none", email: "none",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
+  MARKETING: {
+    painel: "view", crm: "view", pedidos: "none", estoque: "none", relatorios: "view", financeiro: "none", fretes: "none", entregas: "none", automacoes: "edit", disparos: "edit", email: "edit",
+    manuais: "view", whatsapp: "none", integracoes: "none", usuarios: "none",
+  },
   LOGISTICA: {
-    painel: "none", crm: "none", pedidos: "view", estoque: "edit", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "none", email: "none",
+    painel: "none", crm: "none", pedidos: "view", estoque: "edit", relatorios: "none", financeiro: "none", fretes: "edit", entregas: "edit", automacoes: "none", disparos: "none", email: "none",
     manuais: "view", whatsapp: "edit", integracoes: "none", usuarios: "none",
   },
 };
