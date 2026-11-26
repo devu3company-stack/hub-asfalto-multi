@@ -114,3 +114,49 @@ export async function definirDono(form: FormData) {
   await audit(u.id, "whatsapp.dono", `${cx.id} → ${dono ?? "ninguém"}`);
   revalidatePath("/whatsapp/config");
 }
+
+// ───────── Finalizar, transferir, expediente e NPS ─────────
+
+export async function finalizarConversa(form: FormData) {
+  const u = await requireModule("whatsapp", "edit");
+  const chat = String(form.get("chat")), cx = String(form.get("conexao"));
+  if (!(await podeUsar(u, cx))) return;
+  const { finalizar } = await import("@/lib/whatsapp/atendimento");
+  await finalizar(cx, chat, u.id, form.get("nps") === "1");
+  await audit(u.id, "whatsapp.finalizar", chat);
+  revalidatePath("/whatsapp");
+}
+
+export async function transferirConversa(_p: SendState, form: FormData): Promise<SendState> {
+  const u = await requireModule("whatsapp", "edit");
+  const chat = String(form.get("chat")), cx = String(form.get("conexao")), para = String(form.get("para") ?? "");
+  if (!(await podeUsar(u, cx))) return { ok: false, message: "Você só pode transferir conversas do seu número." };
+  if (!para) return { ok: false, message: "Escolha para quem transferir." };
+  if (para === u.id) return { ok: false, message: "Escolha outra pessoa." };
+  const { transferir } = await import("@/lib/whatsapp/atendimento");
+  try {
+    const r = await transferir({ deConexao: cx, chat, deUserId: u.id, paraUserId: para, nota: String(form.get("nota") ?? "").trim(),
+      avisarCliente: form.get("avisar") === "1" ? String(form.get("textoAviso") ?? "").trim() || null : null,
+      apresentacao: form.get("chamar") === "1" ? String(form.get("textoApresentacao") ?? "").trim() || null : null });
+    await audit(u.id, "whatsapp.transferir", `${chat} → ${r.para}`);
+    revalidatePath("/whatsapp");
+    return { ok: true, message: r.chamou ? `Transferido para ${r.para}, que já chamou o cliente pelo próprio número.`
+      : r.semNumero ? `Transferido para ${r.para}. O WhatsApp dessa pessoa ainda não está conectado: ela vê a tarefa no funil e o histórico desta conversa.`
+      : `Transferido para ${r.para}. O WhatsApp dessa pessoa está desconectado agora; ela chama o cliente quando conectar.` };
+  } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Não deu para transferir." }; }
+}
+
+export async function salvarExpedienteNps(form: FormData) {
+  const u = await requireModule("integracoes", "edit");
+  const { salvarExpediente, salvarNpsConfig } = await import("@/lib/whatsapp/atendimento");
+  const hora = (v: FormDataEntryValue | null, p: string) => (/^\d{2}:\d{2}$/.test(String(v ?? "")) ? String(v) : p);
+  await salvarExpediente({
+    ativo: form.get("expAtivo") === "1",
+    mensagem: String(form.get("expMensagem") ?? "").slice(0, 1000),
+    dias: [0, 1, 2, 3, 4, 5, 6].map((d) => (form.get(`aberto${d}`) === "1" ? { abre: hora(form.get(`abre${d}`), "08:00"), fecha: hora(form.get(`fecha${d}`), "18:00") } : null)),
+  });
+  const t = (k: string) => String(form.get(k) ?? "").trim().slice(0, 600);
+  await salvarNpsConfig({ ativo: form.get("npsAtivo") === "1", pergunta: t("npsPergunta"), agradece: t("npsAgradece"), melhoria: t("npsMelhoria"), obrigadoComentario: t("npsObrigado") });
+  await audit(u.id, "whatsapp.expediente_nps");
+  revalidatePath("/whatsapp/config");
+}

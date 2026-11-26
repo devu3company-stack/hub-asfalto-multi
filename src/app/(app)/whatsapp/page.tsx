@@ -7,7 +7,9 @@ import { qrSessoes } from "@/lib/whatsapp/gateway";
 import { conexoesVisiveis, garantirConexaoDoUsuario } from "@/lib/whatsapp/conexoes";
 import SendForm from "./SendForm";
 import AoVivo from "./AoVivo";
-import { alternarIAConversa } from "./actions";
+import { alternarIAConversa, finalizarConversa } from "./actions";
+import Transferir from "./Transferir";
+import { npsConfig, transferidaPara } from "@/lib/whatsapp/atendimento";
 
 export const dynamic = "force-dynamic";
 
@@ -69,9 +71,23 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
   const numeroNovo = searchParams.chat && /^\d{10,13}$/.test(searchParams.chat) && !chats.some((c) => c.chat === searchParams.chat) ? searchParams.chat : null;
   if (numeroNovo) searchParams = { chat: "novo", numero: numeroNovo };
 
-  const selected = searchParams.chat
+  let selected = searchParams.chat
     ? chats.find((c) => c.chat === searchParams.chat && (!searchParams.n || c.conexaoId === searchParams.n)) ?? chats.find((c) => c.chat === searchParams.chat)
     : undefined;
+  // Conversa transferida para mim: posso ler a conversa original (do número do colega), sem responder por ele.
+  const transferencias = searchParams.chat && searchParams.chat !== "novo" ? await transferidaPara(user.id, searchParams.chat) : [];
+  let somenteLeitura = false;
+  if ((!selected || (searchParams.n && selected.conexaoId !== searchParams.n)) && searchParams.n && transferencias.some((t) => t.deConexao === searchParams.n)) {
+    const orig = await db.query.waChats.findFirst({ where: and(eq(schema.waChats.conexaoId, searchParams.n), eq(schema.waChats.chat, searchParams.chat!)) });
+    if (orig) { selected = orig; somenteLeitura = true; }
+  }
+  const [cfgNps, equipe] = await Promise.all([
+    npsConfig(),
+    db.query.users.findMany({ where: eq(schema.users.active, true), columns: { id: true, name: true, role: true } }),
+  ]);
+  const conexaoDe = new Map((await db.query.waConexoes.findMany({ columns: { id: true, userId: true } })).filter((c) => c.userId).map((c) => [c.userId!, c.id]));
+  const colegas = equipe.filter((x) => x.id !== user.id && can(x.role, "whatsapp", "edit"))
+    .map((x) => ({ id: x.id, name: x.name, conectado: sessoes[conexaoDe.get(x.id) ?? ""]?.status === "conectado" }));
   const iaNoNumero = selected ? !!visiveis.find((c) => c.id === selected.conexaoId)?.iaLigada : false;
   const negs = selected ? await negociacoesDoTelefone(selected.chat) : [];
   const msgs = selected
@@ -122,6 +138,7 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     <span className="flex gap-1 mt-1">
                       {visiveis.length > 1 && <span className="badge bg-[#E6E4E3] text-[#3E3B3C] text-[10px] py-0.5">{nomeDe.get(c.conexaoId)?.split(" ")[0] ?? c.conexaoId}</span>}
                       {c.aiPaused && <span className="badge bg-brand-soft text-brand-text text-[10px] py-0.5">Humano</span>}
+                      {c.status === "finalizado" && <span className="badge bg-[#E1F3E5] text-[#1E6B34] text-[10px] py-0.5">Finalizado</span>}
                     </span>
                   </Link>
                 </li>
@@ -152,7 +169,18 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     {negs.length
                       ? negs.map((g) => <Link key={g.id} href={`/crm/${g.id}`} className="btn-outline h-9 px-3 text-sm">Negociação: {g.titulo.slice(0, 24)}</Link>)
                       : <Link href={`/crm/nova?nome=${encodeURIComponent(selected.name ?? "")}&tel=${selected.chat.replace(/^55(?=\d{10,11}$)/, "")}`} className="btn-outline h-9 px-3 text-sm">Criar negociação</Link>}
-                    {iaNoNumero && (
+                    {!somenteLeitura && selected.status !== "finalizado" && (
+                      <details className="relative">
+                        <summary className="btn-outline h-9 px-3 text-sm list-none cursor-pointer">Finalizar</summary>
+                        <form action={finalizarConversa} className="absolute right-0 top-11 z-20 w-72 card shadow-lg flex flex-col gap-2 text-sm">
+                          <input type="hidden" name="chat" value={selected.chat} /><input type="hidden" name="conexao" value={selected.conexaoId} />
+                          <label className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" name="nps" value="1" defaultChecked={cfgNps.ativo} disabled={!cfgNps.ativo} className="w-4 h-4 accent-[#E87722]" />Enviar pesquisa de satisfação (0 a 10)</label>
+                          <button className="btn-primary h-10">Finalizar atendimento</button>
+                        </form>
+                      </details>
+                    )}
+                    {!somenteLeitura && <Transferir chat={selected.chat} conexao={selected.conexaoId} cliente={selected.name} eu={user.name} usuarios={colegas} />}
+                    {iaNoNumero && !somenteLeitura && (
                       <form action={alternarIAConversa}>
                         <input type="hidden" name="chat" value={selected.chat} />
                         <input type="hidden" name="conexao" value={selected.conexaoId} />
@@ -163,6 +191,15 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     </div>
                   )}
                 </div>
+                {transferencias.length > 0 && (
+                  <div className="px-4 py-2 bg-[#E1ECFA] text-sm text-[#1F4E8C] flex flex-col gap-1">
+                    {transferencias.map((t) => (
+                      <p key={t.id}>Transferido por <strong>{t.de?.name ?? "colega"}</strong> em {fmt(t.createdAt)}{t.nota ? `: "${t.nota}"` : ""}
+                        {t.deConexao !== selected.conexaoId && <> · <Link className="underline font-semibold" href={link(t.chat, t.deConexao)}>ver conversa anterior</Link></>}</p>
+                    ))}
+                    {somenteLeitura && <p className="font-semibold">Você está vendo a conversa do número do colega (só leitura). Responda pelo seu número.</p>}
+                  </div>
+                )}
                 <ol id="wa-msgs" className="flex-1 min-h-0 p-4 lg:px-8 flex flex-col gap-2 overflow-y-auto bg-[#F4F1EE]">
                   {msgs.map((m) => (
                     <li key={m.id} className={`max-w-[85%] lg:max-w-[65%] rounded-2xl px-3 py-2 text-sm shadow-sm ${m.fromMe ? "self-end bg-[#FDEBDD]" : "self-start bg-white"}`}>
@@ -172,7 +209,7 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
                     </li>
                   ))}
                 </ol>
-                {editor && <div className="px-3 py-2 lg:px-6 shrink-0 border-t border-surface-line bg-white"><SendForm key={`${selected.conexaoId}:${selected.chat}`} chat={selected.chat} conexao={selected.conexaoId} /></div>}
+                {editor && !somenteLeitura && <div className="px-3 py-2 lg:px-6 shrink-0 border-t border-surface-line bg-white"><SendForm key={`${selected.conexaoId}:${selected.chat}`} chat={selected.chat} conexao={selected.conexaoId} /></div>}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center bg-[#F4F1EE]"><p className="text-sm text-graphite-muted">Escolha uma conversa à esquerda.</p></div>

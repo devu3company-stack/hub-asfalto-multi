@@ -73,6 +73,7 @@ export const PASSOS: Record<string, { rotulo: string; campos: Campo[]; cor: stri
     { k: "instrucao", rotulo: "Orientação para a IA montar a resposta", tipo: "textarea", padrao: "Monte uma resposta de orçamento com os produtos e preços que o cliente pediu. Se faltar quantidade ou CEP, pergunte." }] },
   enviar_manual: { rotulo: "Responder com o manual do produto", cor: "#7C3AED", campos: [
     { k: "pdf", rotulo: "Mandar o PDF do manual junto", tipo: "bool", padrao: true }] },
+  pesquisa_nps: { rotulo: "Enviar pesquisa de satisfação (NPS 0 a 10)", cor: "#1E8A44", campos: [] },
   responder_ia: { rotulo: "Responder com a IA (produtos, estoque, pedidos e manuais)", cor: "#7C3AED", campos: [] },
   criar_lead: { rotulo: "Criar lead no funil (se não existir)", cor: "#E87722", campos: [{ k: "titulo", rotulo: "Nome da negociação (opcional)", tipo: "texto" }] },
   tarefa: { rotulo: "Criar tarefa para o vendedor", cor: "#E87722", campos: [
@@ -176,6 +177,12 @@ export const MODELOS: Modelo[] = [
       p("esperar", { dias: 3 }),
       p("whatsapp", { texto: "{{primeiro_nome}}, deu tudo certo com o material? Se puder, conta pra gente como foi — sua opinião ajuda muito! ⭐" }),
     ],
+  },
+  {
+    chave: "frete_nps", grupo: "frete", nome: "Pesquisa de satisfação após a entrega",
+    descricao: "1 dia depois da entrega, pergunta de 0 a 10 quanto o cliente recomendaria a empresa (NPS).",
+    gatilho: "entrega.status", gatilhoConfig: { status: "entregue" },
+    passos: [p("esperar", { dias: 1 }), p("pesquisa_nps")],
   },
   // ── Remarketing e pós-venda ──
   {

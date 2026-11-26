@@ -11,6 +11,7 @@ import { leadDoWhatsApp } from "../crm";
 import { disparar } from "../automacoes/motor";
 import { rotuloMidia, salvarMidia, type Midia } from "./midia";
 import { conexao, conexaoPara, iaLigadaEm } from "./conexoes";
+import { avisarForaDoExpediente, reabrirSePreciso, tratarRespostaNps } from "./atendimento";
 
 export type Channel = "qr" | "oficial";
 const M = schema.waMessages;
@@ -95,6 +96,10 @@ export async function handleIncoming(m: Incoming) {
     .onConflictDoNothing().returning({ id: M.id });
   if (!inserted.length) return;
   await touchChat(m.conexaoId, m.chat, m.channel, f.text, m.name);
+  await reabrirSePreciso(m.conexaoId, m.chat);
+
+  // Resposta da pesquisa NPS (nota ou comentário): não vai para a IA nem para as automações.
+  if (m.text && (await tratarRespostaNps(m.conexaoId, m.chat, m.text).catch(() => false))) return;
 
   // O lead por CPF/CNPJ funciona em todos os números; o lead fica com o dono do número.
   if (m.text) leadDoWhatsApp({ chat: m.chat, nome: m.name, texto: m.text, responsavelId: cx.userId }).catch((e) => console.error("lead:", e instanceof Error ? e.message : e));
@@ -105,6 +110,9 @@ export async function handleIncoming(m: Incoming) {
     await sendMessage(m.chat, "Tudo bem! Você não vai mais receber nossas mensagens automáticas. Se precisar, é só chamar aqui. 🙂", "auto", { conexao: m.conexaoId }).catch(() => null);
     return;
   }
+
+  // Fora do expediente: aviso automático (nos números sem IA).
+  await avisarForaDoExpediente(m.conexaoId, m.chat, cx.iaLigada).catch((e) => console.error("expediente:", e instanceof Error ? e.message : e));
 
   // IA e automações só respondem nos números em que foram ligadas.
   if (!cx.iaLigada) return;

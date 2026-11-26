@@ -261,6 +261,13 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
       }
       return { acao: "seguir", texto: `Respondeu com o manual "${r.titulo}"` };
     }
+    case "pesquisa_nps": {
+      if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
+      const numero = await numeroDaAutomacao(ctx, chat);
+      if (!numero.ligado) return { acao: "seguir", texto: `Pulou: automações desligadas no número de ${numero.nome}` };
+      const { enviarNps } = await import("../whatsapp/atendimento");
+      return (await enviarNps(numero.id, chat, "automacao")) ? { acao: "seguir", texto: "Pesquisa NPS enviada" } : { acao: "seguir", texto: "Pesquisa NPS desligada nas configurações" };
+    }
     case "responder_ia": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
       const numero = await numeroDaAutomacao(ctx, chat);

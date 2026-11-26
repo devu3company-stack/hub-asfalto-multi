@@ -8,7 +8,8 @@ import { qrSessoes } from "@/lib/whatsapp/gateway";
 import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
 import { AI_LABELS, AI_PROVIDERS } from "@/lib/ai";
 import { PageHeader, Badge } from "@/components/ui";
-import { alternarIA, definirDono, desconectar, salvarConfig } from "../actions";
+import { alternarIA, definirDono, desconectar, salvarConfig, salvarExpedienteNps } from "../actions";
+import { DIAS, expediente, npsConfig } from "@/lib/whatsapp/atendimento";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +20,13 @@ export default async function ConfigWhatsApp() {
     db.query.users.findMany({ columns: { id: true, name: true }, orderBy: asc(schema.users.name) }),
     qrSessoes(), conexaoPadrao(), getSetting("ia.instrucoes"), getSetting("ia.provedor"), listIntegrations(),
   ]);
+  const [exp, nps] = await Promise.all([expediente(), npsConfig()]);
   const ia = integ.find((i) => i.provider === provedor);
   const estado = (id: string) => (id === "oficial" ? "conectado" : sessoes[id]?.status ?? "desconectado");
   return (
     <>
       <PageHeader title="WhatsApp da equipe" subtitle="Cada usuário conecta o próprio número em Meu WhatsApp. Aqui você vê todos e configura a IA.">
-        <Link href="/whatsapp" className="btn-outline h-9 px-4">Voltar às conversas</Link>
+        <div className="flex gap-2"><Link href="/whatsapp/nps" className="btn-outline h-9 px-4">Relatório NPS</Link><Link href="/whatsapp" className="btn-outline h-9 px-4">Voltar às conversas</Link></div>
       </PageHeader>
 
       <section className="card p-0 overflow-hidden">
@@ -82,6 +84,34 @@ export default async function ConfigWhatsApp() {
           <div><button className="btn-primary">Salvar</button></div>
         </form>
       </section>
+
+      <form action={salvarExpedienteNps} className="grid lg:grid-cols-2 gap-4 items-start">
+        <section className="card flex flex-col gap-3">
+          <h2 className="font-display font-bold text-lg">Fora do expediente</h2>
+          <label className="flex items-center gap-2 font-semibold min-h-[40px]"><input type="checkbox" name="expAtivo" value="1" defaultChecked={exp.ativo} className="w-5 h-5 accent-[#E87722]" />Responder automaticamente fora do horário</label>
+          <p className="text-xs text-graphite-muted">Sai uma vez a cada 12 horas por conversa, em todos os números. Nos números com a IA ligada, quem atende é a IA (24 horas) e o aviso não sai.</p>
+          <div className="flex flex-col gap-2">
+            {DIAS.map((nome, d) => (
+              <div key={d} className="flex flex-wrap items-center gap-2 text-sm">
+                <label className="flex items-center gap-2 w-28 min-h-[40px]"><input type="checkbox" name={`aberto${d}`} value="1" defaultChecked={!!exp.dias[d]} className="w-4 h-4 accent-[#E87722]" />{nome}</label>
+                <input type="time" name={`abre${d}`} aria-label={`${nome}: abre`} defaultValue={exp.dias[d]?.abre ?? "08:00"} className="input h-10 w-32" />
+                <span>às</span>
+                <input type="time" name={`fecha${d}`} aria-label={`${nome}: fecha`} defaultValue={exp.dias[d]?.fecha ?? "18:00"} className="input h-10 w-32" />
+              </div>
+            ))}
+          </div>
+          <div><label htmlFor="expMensagem" className="label">Mensagem</label><textarea id="expMensagem" name="expMensagem" rows={4} defaultValue={exp.mensagem} className="input h-auto py-2" /></div>
+        </section>
+        <section className="card flex flex-col gap-3">
+          <h2 className="font-display font-bold text-lg">Pesquisa de satisfação (NPS)</h2>
+          <label className="flex items-center gap-2 font-semibold min-h-[40px]"><input type="checkbox" name="npsAtivo" value="1" defaultChecked={nps.ativo} className="w-5 h-5 accent-[#E87722]" />Pesquisa ligada</label>
+          <p className="text-xs text-graphite-muted">Enviada quando o atendente toca em Finalizar (pode desmarcar na hora) ou pela automação depois da entrega. Notas de 0 a 8 recebem a pergunta de melhoria.</p>
+          {([["npsPergunta", "Pergunta", nps.pergunta], ["npsAgradece", "Agradecimento (nota 9 ou 10)", nps.agradece], ["npsMelhoria", "Pergunta de melhoria (nota 0 a 8)", nps.melhoria], ["npsObrigado", "Agradecimento depois do comentário", nps.obrigadoComentario]] as const).map(([k, r, v]) => (
+            <div key={k}><label htmlFor={k} className="label">{r}</label><textarea id={k} name={k} rows={2} defaultValue={v} className="input h-auto py-2" /></div>
+          ))}
+        </section>
+        <div className="lg:col-span-2"><button className="btn-primary">Salvar expediente e NPS</button></div>
+      </form>
     </>
   );
 }

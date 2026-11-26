@@ -165,6 +165,10 @@ export const waChats = pgTable("wa_chats", {
   channel: text("channel").notNull().default("qr"), // qr | oficial — por onde chegou a última mensagem
   aiPaused: boolean("ai_paused").notNull().default(false),
   optout: boolean("optout").notNull().default(false), // pediu para não receber mensagens de marketing (respondeu SAIR)
+  status: text("status").notNull().default("aberto"), // aberto | finalizado
+  foraEnviadoEm: timestamp("fora_enviado_em", { withTimezone: true }), // último aviso de fora do expediente
+  npsEtapa: text("nps_etapa"), // nota | comentario (esperando resposta da pesquisa)
+  npsId: text("nps_id"),
   lastText: text("last_text"),
   lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.conexaoId, t.chat] }), index("wa_chats_last_at_idx").on(t.lastAt)]);
@@ -580,3 +584,36 @@ export const disparoContatos = pgTable("disparo_contatos", {
   enviadoEm: timestamp("enviado_em", { withTimezone: true }),
   ordem: integer("ordem").notNull().default(0),
 }, (t) => [uniqueIndex("disparo_contato_uq").on(t.disparoId, t.telefone), index("disparo_contato_fila_idx").on(t.disparoId, t.status, t.ordem)]);
+
+// ───────── NPS e transferências de atendimento ─────────
+
+export const npsRespostas = pgTable("nps_respostas", {
+  id: id(),
+  conexaoId: text("conexao_id").notNull(),
+  chat: text("chat").notNull(),
+  nome: text("nome"),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }), // quem atendeu
+  origem: text("origem").notNull().default("atendimento"), // atendimento | automacao
+  nota: integer("nota"),
+  comentario: text("comentario"),
+  respondidaEm: timestamp("respondida_em", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("nps_criado_idx").on(t.createdAt)]);
+
+export const waTransferencias = pgTable("wa_transferencias", {
+  id: id(),
+  chat: text("chat").notNull(),
+  nome: text("nome"),
+  deConexao: text("de_conexao").notNull(),
+  deUserId: text("de_user_id").references(() => users.id, { onDelete: "set null" }),
+  paraUserId: text("para_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  paraConexao: text("para_conexao"),
+  nota: text("nota"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("wa_transf_para_idx").on(t.paraUserId, t.chat)]);
+
+export const npsRespostasRelations = relations(npsRespostas, ({ one }) => ({ user: one(users, { fields: [npsRespostas.userId], references: [users.id] }) }));
+export const waTransferenciasRelations = relations(waTransferencias, ({ one }) => ({
+  de: one(users, { fields: [waTransferencias.deUserId], references: [users.id], relationName: "transf_de" }),
+  para: one(users, { fields: [waTransferencias.paraUserId], references: [users.id], relationName: "transf_para" }),
+}));
