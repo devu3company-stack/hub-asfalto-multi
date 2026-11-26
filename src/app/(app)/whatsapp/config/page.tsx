@@ -8,7 +8,7 @@ import { qrSessoes } from "@/lib/whatsapp/gateway";
 import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
 import { AI_LABELS, AI_PROVIDERS } from "@/lib/ai";
 import { PageHeader, Badge } from "@/components/ui";
-import { alternarIA, definirDono, desconectar, removerOficial, salvarConfig, salvarExpedienteNps } from "../actions";
+import { alternarIA, definirDono, desconectar, removerOficial, salvarConfig, salvarExpedienteNps, salvarRepasse } from "../actions";
 import OficialForm from "./OficialForm";
 import { DIAS, expediente, npsConfig } from "@/lib/whatsapp/atendimento";
 
@@ -21,7 +21,8 @@ export default async function ConfigWhatsApp() {
     db.query.users.findMany({ columns: { id: true, name: true }, orderBy: asc(schema.users.name) }),
     qrSessoes(), conexaoPadrao(), getSetting("ia.instrucoes"), getSetting("ia.provedor"), listIntegrations(),
   ]);
-  const [exp, nps] = await Promise.all([expediente(), npsConfig()]);
+  const [exp, nps, ultimo, teste, repassar] = await Promise.all([expediente(), npsConfig(), getSetting("whatsapp.oficial.ultimo"), getSetting("whatsapp.oficial.teste"), getSetting("whatsapp.oficial.repassar")]);
+  const quando = (iso: string) => (iso ? new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "nunca");
   const ia = integ.find((i) => i.provider === provedor);
   const oficialOk = integ.some((i) => i.provider === "whatsapp_oficial");
   const estado = (id: string) => (conexoes.find((c) => c.id === id)?.tipo === "oficial" ? (oficialOk ? "conectado" : "desconectado") : sessoes[id]?.status ?? "desconectado");
@@ -64,6 +65,15 @@ export default async function ConfigWhatsApp() {
           <h2 className="font-display font-bold text-lg">Números da API oficial (Meta)</h2>
           <p className="text-sm text-graphite">O app da Meta (token, chave secreta e webhook) fica em <Link href="/integracoes" className="text-brand-text font-semibold underline">Integrações</Link>. Aqui você cadastra cada número desse app e escolhe quem usa. Número que mandar mensagem sem estar cadastrado aparece aqui sozinho.</p>
           {!oficialOk && <p className="text-sm text-[#A0261C] mt-1">A API oficial ainda não está configurada em Integrações.</p>}
+        </div>
+        <div className="rounded-xl bg-[#F8F7F6] p-3 text-sm flex flex-col gap-2">
+          <p><strong>Webhook:</strong> último aviso da Meta em <strong>{quando(ultimo)}</strong> · último teste (botão &quot;Testar&quot; da Meta) em <strong>{quando(teste)}</strong></p>
+          <form action={salvarRepasse} className="flex flex-col gap-2">
+            <label htmlFor="repassar" className="label mb-0">Repassar os avisos da Meta para outro sistema (ex.: o outro CRM) — um endereço por linha</label>
+            <textarea id="repassar" name="repassar" rows={2} defaultValue={repassar} className="input h-auto py-2 font-mono text-xs" placeholder="https://outro-crm.com.br/webhook/whatsapp" />
+            <p className="text-xs text-graphite-muted">A Meta só aceita um endereço de webhook por app. Cadastre o do Hub na Meta e coloque aqui o endereço que o outro sistema usava: o Hub repassa cada mensagem com a mesma assinatura, e os dois continuam recebendo.</p>
+            <button className="btn-outline h-10 w-fit">Salvar repasse</button>
+          </form>
         </div>
         {oficiais.map((c) => (
           <details key={c.id} className="rounded-xl border border-surface-line p-3">

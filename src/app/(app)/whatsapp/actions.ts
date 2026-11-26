@@ -182,6 +182,7 @@ export async function salvarOficial(_p: SendState, form: FormData): Promise<Send
   }
   await audit(u.id, "whatsapp.oficial.salvar", `${nome} (${pid})`);
   revalidatePath("/whatsapp/config");
+  revalidatePath("/whatsapp/conectar");
   return { ok: true, message: id ? "Número atualizado." : `Número "${nome}" cadastrado.` };
 }
 
@@ -191,5 +192,25 @@ export async function removerOficial(form: FormData) {
   if (!cx || cx.tipo !== "oficial") return;
   await db.delete(K).where(eq(K.id, cx.id));
   await audit(u.id, "whatsapp.oficial.remover", cx.nome);
+  revalidatePath("/whatsapp/config");
+}
+
+/** Administrador vincula (ou tira) um número oficial de um usuário. */
+export async function vincularOficial(form: FormData) {
+  const u = await requireModule("integracoes", "edit");
+  const cx = await conexao(String(form.get("conexao")));
+  if (!cx || cx.tipo !== "oficial") return;
+  const dono = String(form.get("userId") ?? "") || null;
+  await db.update(K).set({ userId: dono }).where(eq(K.id, cx.id));
+  await audit(u.id, "whatsapp.oficial.vincular", `${cx.nome} → ${dono ?? "ninguém"}`);
+  revalidatePath("/whatsapp/conectar");
+  revalidatePath("/whatsapp/config");
+}
+
+export async function salvarRepasse(form: FormData) {
+  const u = await requireModule("integracoes", "edit");
+  const urls = String(form.get("repassar") ?? "").split(/\s+/).map((x) => x.trim()).filter((x) => /^https:\/\/[^\s]+$/.test(x)).slice(0, 5);
+  await setSetting("whatsapp.oficial.repassar", urls.join("\n"));
+  await audit(u.id, "whatsapp.oficial.repassar", urls.join(" "));
   revalidatePath("/whatsapp/config");
 }

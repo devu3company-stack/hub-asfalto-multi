@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getConfig } from "@/lib/integrations/store";
+import { getSetting, setSetting } from "@/lib/settings";
 import { baixarMidiaOficial, verifyMetaSignature } from "@/lib/whatsapp/oficial";
 import { conexaoOficialPorId, configOficial } from "@/lib/whatsapp/conexoes";
 import { MAX_MIDIA, paraOuvir, type Midia, type TipoMidia } from "@/lib/whatsapp/midia";
@@ -27,10 +28,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "assinatura inválida" }, { status: 401 });
   }
   const body = JSON.parse(raw);
+  await setSetting("whatsapp.oficial.ultimo", new Date().toISOString()).catch(() => null);
+
+  // Repassa o aviso, com a mesma assinatura, para outros sistemas que usam o mesmo app da Meta (ex.: outro CRM).
+  const destinos = (await getSetting("whatsapp.oficial.repassar")).split(/\s+/).filter((u) => /^https:\/\//.test(u));
+  for (const url of destinos) {
+    fetch(url, { method: "POST", body: raw, signal: AbortSignal.timeout(10000),
+      headers: { "Content-Type": "application/json", "X-Hub-Signature-256": req.headers.get("x-hub-signature-256") ?? "" } })
+      .catch((e) => console.error("repasse webhook:", url, e instanceof Error ? e.message : e));
+  }
+
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const v = change.value ?? {};
       if (!(v.messages ?? []).length) continue;
+      // Botão "Testar" do painel da Meta manda um número fictício: só registra que chegou.
+      if (String(v.metadata?.phone_number_id) === "123456123") { await setSetting("whatsapp.oficial.teste", new Date().toISOString()).catch(() => null); continue; }
       // Cada número oficial vira uma conexão (com dono) — identificado pelo phone_number_id.
       const cx = await conexaoOficialPorId(String(v.metadata?.phone_number_id ?? ""));
       const cfgNum = (await configOficial(cx)) ?? cfg;
