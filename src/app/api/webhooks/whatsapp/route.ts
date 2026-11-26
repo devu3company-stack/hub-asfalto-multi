@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { gatewayTokenOk } from "@/lib/whatsapp/gateway";
-import { chatKey, handleIncoming } from "@/lib/whatsapp/service";
+import { chatKey, handleIncoming, juntarLid } from "@/lib/whatsapp/service";
 import { MAX_MIDIA, paraOuvir, type Midia, type TipoMidia } from "@/lib/whatsapp/midia";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
     if (buffer.length <= MAX_MIDIA) midia = await paraOuvir({ buffer, mime: String(b.media.mimetype ?? "application/octet-stream"), nome: b.media.fileName ?? null, tipo });
   }
   const sessao = typeof b.session === "string" && /^[a-z0-9_-]{1,40}$/i.test(b.session) ? b.session : "principal";
+  // Conversa que tinha chegado só com o código "@lid" e agora veio com o número real: junta as duas.
+  if (typeof b.lid === "string" && !String(b.chat).endsWith("@lid")) await juntarLid(sessao, chatKey(b.lid), chatKey(String(b.chat))).catch(() => null);
   await handleIncoming({
     conexaoId: sessao,
     id: b.id ? `qr_${sessao}_${b.id}` : undefined,

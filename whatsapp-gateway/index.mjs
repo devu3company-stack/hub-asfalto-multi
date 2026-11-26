@@ -42,13 +42,13 @@ async function limpar(dir) {
 }
 const pareada = (dir) => access(join(dir, "creds.json")).then(() => true, () => false);
 
-/** @type {Map<string, {id:string, dir:string, state:any, sock:any, starting:boolean, retries:number, parar:boolean, qrs:number}>} */
+/** @type {Map<string, {id:string, dir:string, state:any, sock:any, starting:boolean, retries:number, parar:boolean, qrs:number, contatos:Map<string, any>, lids:Map<string,string>}>} */
 const sessoes = new Map();
 
 function sessao(id) {
   let s = sessoes.get(id);
   if (!s) {
-    s = { id, dir: pastaDe(id), state: { status: "desconectado", qr: null, number: null, name: null, updatedAt: Date.now() }, sock: null, starting: false, retries: 0, parar: false, qrs: 0 };
+    s = { id, dir: pastaDe(id), state: { status: "desconectado", qr: null, number: null, name: null, updatedAt: Date.now() }, sock: null, starting: false, retries: 0, parar: false, qrs: 0, contatos: new Map(), lids: new Map() };
     sessoes.set(id, s);
   }
   return s;
@@ -67,6 +67,19 @@ async function start(s) {
     const sock = makeWASocket({ auth, version, logger, printQRInTerminal: false, browser: Browsers.appropriate("Desktop"), markOnlineOnConnect: false, syncFullHistory: false });
     s.sock = sock;
     sock.ev.on("creds.update", saveCreds);
+
+    // Agenda do celular + nome do perfil: para mostrar o nome de quem não está salvo e achar o número por trás do "@lid".
+    const guardar = (c) => {
+      if (!c?.id) return;
+      const antes = s.contatos.get(c.id) ?? {};
+      const novo = { ...antes };
+      for (const k of ["name", "notify", "verifiedName", "lid"]) if (c[k]) novo[k] = c[k];
+      s.contatos.set(c.id, novo);
+      if (c.id.endsWith("@s.whatsapp.net") && c.lid) s.lids.set(c.lid, c.id);
+    };
+    sock.ev.on("contacts.upsert", (cs) => cs.forEach(guardar));
+    sock.ev.on("contacts.update", (cs) => cs.forEach(guardar));
+    sock.ev.on("messaging-history.set", ({ contacts }) => contacts?.forEach(guardar));
 
     sock.ev.on("connection.update", async (u) => {
       if (u.qr) {
@@ -112,7 +125,18 @@ async function start(s) {
         const midia = img ? ["imagem", img] : aud ? ["audio", aud] : vid ? ["video", vid] : doc ? ["documento", doc] : stk ? ["figurinha", stk] : null;
         const text = msg.conversation ?? msg.extendedTextMessage?.text ?? img?.caption ?? vid?.caption ?? doc?.caption ?? "";
         if (!text && !midia) continue;
-        const payload = { session: s.id, id: m.key.id, chat: jid, fromMe: Boolean(m.key.fromMe), name: m.pushName ?? null, text, timestamp: Number(m.messageTimestamp ?? Date.now() / 1000) };
+        // WhatsApp esconde o número de alguns contatos (jid "@lid"): usa o número real quando ele vem junto ou já é conhecido.
+        let pn = null;
+        if (jid.endsWith("@lid")) {
+          pn = m.key.senderPn || s.lids.get(jid) || null;
+          if (m.key.senderPn) s.lids.set(jid, m.key.senderPn);
+        }
+        const chatJid = pn || jid;
+        if (!m.key.fromMe && m.pushName) guardar({ id: chatJid, notify: m.pushName });
+        const ag = s.contatos.get(chatJid) ?? s.contatos.get(jid) ?? {};
+        // Nome: o salvo na agenda do celular; senão o nome do perfil do WhatsApp.
+        const nome = m.key.fromMe ? (ag.name ?? null) : (ag.name || m.pushName || ag.notify || ag.verifiedName || null);
+        const payload = { session: s.id, id: m.key.id, chat: chatJid, lid: jid.endsWith("@lid") ? jid : null, fromMe: Boolean(m.key.fromMe), name: nome, text, timestamp: Number(m.messageTimestamp ?? Date.now() / 1000) };
         if (midia) {
           const [tipo, info] = midia;
           payload.media = { tipo, mimetype: info.mimetype ?? "application/octet-stream", fileName: info.fileName ?? null, voz: Boolean(info.ptt) };
@@ -214,6 +238,12 @@ http.createServer(async (req, res) => {
       const jid = String(b.to).includes("@") ? String(b.to) : toJid(b.to);
       const r = await s.sock.sendMessage(jid, conteudo(b));
       return send(res, 200, { ok: true, id: r?.key?.id, chat: jid });
+    }
+    if (req.method === "POST" && acao === "contato") {
+      const { jid } = await body(req);
+      const pnJ = String(jid).endsWith("@lid") ? s.lids.get(String(jid)) ?? null : null;
+      const ag = s.contatos.get(pnJ ?? String(jid)) ?? s.contatos.get(String(jid)) ?? {};
+      return send(res, 200, { pn: pnJ, name: ag.name || ag.notify || ag.verifiedName || null });
     }
     if (req.method === "POST" && acao === "check") {
       const { number } = await body(req);

@@ -14,7 +14,10 @@ import { npsConfig, transferidaPara } from "@/lib/whatsapp/atendimento";
 export const dynamic = "force-dynamic";
 
 const fmt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const showNumber = (chat: string) => (/^\d+$/.test(chat) ? `+${chat}` : chat);
+const showNumber = (chat: string) =>
+  chat.endsWith("@lid") ? "Número oculto pelo WhatsApp"
+  : /^55\d{10,11}$/.test(chat) ? chat.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3")
+  : /^\d+$/.test(chat) ? `+${chat}` : chat;
 
 import { negociacoesDoTelefone } from "@/lib/crm";
 import { rotuloMidia, type TipoMidia } from "@/lib/whatsapp/midia";

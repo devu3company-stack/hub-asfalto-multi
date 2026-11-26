@@ -25,6 +25,21 @@ export function chatKey(jidOrNumber: string) {
   return jidOrNumber.replace(/\D/g, "");
 }
 
+/** Junta a conversa que estava com o código "@lid" na conversa do número real. */
+export async function juntarLid(conexaoId: string, lid: string, numero: string) {
+  if (!lid.endsWith("@lid") || lid === numero) return;
+  const velha = await db.query.waChats.findFirst({ where: daConversa(conexaoId, lid) });
+  if (!velha) return;
+  await db.update(M).set({ chat: numero }).where(and(eq(M.conexaoId, conexaoId), eq(M.chat, lid)));
+  const nova = await db.query.waChats.findFirst({ where: daConversa(conexaoId, numero) });
+  if (nova) {
+    await db.update(C).set({ name: nova.name ?? velha.name, optout: nova.optout || velha.optout }).where(daConversa(conexaoId, numero));
+    await db.delete(C).where(daConversa(conexaoId, lid));
+  } else {
+    await db.update(C).set({ chat: numero }).where(daConversa(conexaoId, lid));
+  }
+}
+
 async function touchChat(conexaoId: string, chat: string, channel: Channel, text: string, name?: string | null) {
   await db.insert(C).values({ conexaoId, chat, channel, name: name ?? null, lastText: text, lastAt: new Date() })
     .onConflictDoUpdate({ target: [C.conexaoId, C.chat], set: { channel, lastText: text, lastAt: new Date(), ...(name ? { name } : {}) } });
@@ -84,7 +99,7 @@ export async function handleIncoming(m: Incoming) {
     const f = await camposMidia(m);
     await db.insert(M).values({ ...(m.id ? { id: m.id } : {}), conexaoId: m.conexaoId, chat: m.chat, channel: m.channel, fromMe: true, sentBy: "humano", userId: cx.userId, text: f.text, ...f.extra })
       .onConflictDoNothing();
-    await touchChat(m.conexaoId, m.chat, m.channel, f.text);
+    await touchChat(m.conexaoId, m.chat, m.channel, f.text, m.name);
     await setAiPaused(m.chat, true, m.conexaoId); // respondeu pelo celular = humano assumiu
     return;
   }
