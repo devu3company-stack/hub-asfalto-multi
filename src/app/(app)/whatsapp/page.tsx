@@ -65,9 +65,10 @@ export default async function WhatsApp({ searchParams }: { searchParams: { chat?
     qrSessoes(),
     db.query.waChats.findMany({ where: inArray(schema.waChats.conexaoId, filtroN ? [filtroN] : ids), orderBy: desc(schema.waChats.lastAt), limit: 150 }),
   ]);
-  const estado = (id: string) => (id === "oficial" ? "conectado" : sessoes[id]?.status ?? "desconectado");
+  const tipos = new Map(visiveis.map((c) => [c.id, c.tipo]));
+  const estado = (id: string) => (tipos.get(id) === "oficial" ? "conectado" : sessoes[id]?.status ?? "desconectado");
   const nomeDe = new Map(visiveis.map((c) => [c.id, c.nome]));
-  const minhaOk = estado(minha.id) === "conectado";
+  const minhaOk = estado(minha.id) === "conectado" || visiveis.some((c) => c.userId === user.id && c.tipo === "oficial");
   const conectadas = visiveis.filter((c) => estado(c.id) === "conectado");
 
   // Número aberto a partir do funil de vendas, sem conversa ainda.

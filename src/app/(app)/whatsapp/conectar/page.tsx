@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { and, eq } from "drizzle-orm";
 import { requireModule } from "@/lib/auth";
+import { db, schema } from "@/lib/db";
 import { qrStatus } from "@/lib/whatsapp/gateway";
 import { garantirConexaoDoUsuario } from "@/lib/whatsapp/conexoes";
 import { PageHeader } from "@/components/ui";
@@ -12,11 +14,19 @@ export default async function MeuWhatsApp() {
   const user = await requireModule("whatsapp");
   const cx = await garantirConexaoDoUsuario(user);
   const st = await qrStatus(cx.id);
+  const oficiais = await db.query.waConexoes.findMany({ where: and(eq(schema.waConexoes.userId, user.id), eq(schema.waConexoes.tipo, "oficial")) });
   return (
     <>
       <PageHeader title="Meu WhatsApp" subtitle="Seu número, só seu: as conversas dele aparecem para você (e para o administrador).">
         <Link href="/whatsapp" className="btn-outline h-9 px-4">Conversas</Link>
       </PageHeader>
+      {oficiais.length > 0 && (
+        <section className="card flex flex-col gap-2">
+          <h2 className="font-display font-bold text-lg">Números da API oficial com você</h2>
+          {oficiais.map((o) => <p key={o.id} className="text-sm"><strong>{o.nome}</strong> {o.numero ? `· ${o.numero}` : ""} · conectado pela Meta (não precisa de QR) · IA {o.iaLigada ? "ligada" : "desligada"}</p>)}
+          <p className="text-xs text-graphite-muted">Pela API oficial, só dá para mandar mensagem livre a quem escreveu nas últimas 24 horas. Fora disso, a Meta exige mensagem modelo aprovada.</p>
+        </section>
+      )}
       <div className="grid lg:grid-cols-3 gap-4 items-start">
         <section className="card flex flex-col gap-3 lg:col-span-2">
           <h2 className="font-display font-bold text-lg">Conexão</h2>

@@ -10,7 +10,7 @@ import { oficialSend } from "./oficial";
 import { leadDoWhatsApp } from "../crm";
 import { disparar } from "../automacoes/motor";
 import { rotuloMidia, salvarMidia, type Midia } from "./midia";
-import { conexao, conexaoPara, iaLigadaEm } from "./conexoes";
+import { configOficial, conexao, conexaoPara, iaLigadaEm } from "./conexoes";
 import { avisarForaDoExpediente, reabrirSePreciso, tratarRespostaNps } from "./atendimento";
 
 export type Channel = "qr" | "oficial";
@@ -59,7 +59,7 @@ export async function sendMessage(chat: string, text: string, sentBy: "ia" | "hu
   const channel: Channel = cx?.tipo === "oficial" ? "oficial" : "qr";
   let id: string | undefined;
   if (channel === "oficial") {
-    const cfg = await getConfig("whatsapp_oficial");
+    const cfg = cx ? await configOficial(cx) : null;
     if (!cfg) throw new Error("API oficial não configurada na aba Integrações.");
     const r = await oficialSend(cfg, chat, text, opts.midia);
     id = r.id ? `of_${r.id}` : undefined;

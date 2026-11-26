@@ -155,6 +155,8 @@ export const waConexoes = pgTable("wa_conexoes", {
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
   iaLigada: boolean("ia_ligada").notNull().default(false), // IA e automações respondem neste número
   numero: text("numero"),
+  phoneNumberId: text("phone_number_id"), // API oficial: ID do número na Meta
+  tokenCripto: text("token_cripto"), // API oficial: token próprio deste número (opcional, criptografado)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

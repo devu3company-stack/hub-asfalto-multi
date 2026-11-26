@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getConfig } from "@/lib/integrations/store";
 import { baixarMidiaOficial, verifyMetaSignature } from "@/lib/whatsapp/oficial";
+import { conexaoOficialPorId, configOficial } from "@/lib/whatsapp/conexoes";
 import { MAX_MIDIA, paraOuvir, type Midia, type TipoMidia } from "@/lib/whatsapp/midia";
 import { handleIncoming } from "@/lib/whatsapp/service";
 
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const v = change.value ?? {};
+      if (!(v.messages ?? []).length) continue;
+      // Cada número oficial vira uma conexão (com dono) — identificado pelo phone_number_id.
+      const cx = await conexaoOficialPorId(String(v.metadata?.phone_number_id ?? ""));
+      const cfgNum = (await configOficial(cx)) ?? cfg;
       const names: Record<string, string> = {};
       for (const c of v.contacts ?? []) names[c.wa_id] = c.profile?.name;
       for (const m of (v.messages ?? []) as MetaMsg[]) {
@@ -42,11 +47,11 @@ export async function POST(req: NextRequest) {
         let midia: Midia | null = null;
         if (tipo && info?.id) {
           try {
-            const d = await baixarMidiaOficial(cfg, info.id);
+            const d = await baixarMidiaOficial(cfgNum, info.id);
             if (d.buffer.length <= MAX_MIDIA) midia = await paraOuvir({ buffer: d.buffer, mime: info.mime_type ?? d.mime, nome: info.filename ?? null, tipo });
           } catch (e) { console.error("mídia oficial:", e instanceof Error ? e.message : e); }
         }
-        await handleIncoming({ conexaoId: "oficial", id: `of_${m.id}`, chat: m.from, channel: "oficial", fromMe: false, name: names[m.from] ?? null, text, midia,
+        await handleIncoming({ conexaoId: cx.id, id: `of_${m.id}`, chat: m.from, channel: "oficial", fromMe: false, name: names[m.from] ?? null, text, midia,
           midiaFalhou: tipo && !midia ? { tipo, nome: info?.filename ?? null } : undefined });
       }
     }

@@ -8,7 +8,8 @@ import { qrSessoes } from "@/lib/whatsapp/gateway";
 import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
 import { AI_LABELS, AI_PROVIDERS } from "@/lib/ai";
 import { PageHeader, Badge } from "@/components/ui";
-import { alternarIA, definirDono, desconectar, salvarConfig, salvarExpedienteNps } from "../actions";
+import { alternarIA, definirDono, desconectar, removerOficial, salvarConfig, salvarExpedienteNps } from "../actions";
+import OficialForm from "./OficialForm";
 import { DIAS, expediente, npsConfig } from "@/lib/whatsapp/atendimento";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,9 @@ export default async function ConfigWhatsApp() {
   ]);
   const [exp, nps] = await Promise.all([expediente(), npsConfig()]);
   const ia = integ.find((i) => i.provider === provedor);
-  const estado = (id: string) => (id === "oficial" ? "conectado" : sessoes[id]?.status ?? "desconectado");
+  const oficialOk = integ.some((i) => i.provider === "whatsapp_oficial");
+  const estado = (id: string) => (conexoes.find((c) => c.id === id)?.tipo === "oficial" ? (oficialOk ? "conectado" : "desconectado") : sessoes[id]?.status ?? "desconectado");
+  const qr = conexoes.filter((c) => c.tipo === "qr"), oficiais = conexoes.filter((c) => c.tipo === "oficial");
   return (
     <>
       <PageHeader title="WhatsApp da equipe" subtitle="Cada usuário conecta o próprio número em Meu WhatsApp. Aqui você vê todos e configura a IA.">
@@ -30,15 +33,15 @@ export default async function ConfigWhatsApp() {
       </PageHeader>
 
       <section className="card p-0 overflow-hidden">
-        <h2 className="font-display font-bold text-lg p-4 pb-2">Números conectados</h2>
+        <h2 className="font-display font-bold text-lg p-4 pb-2">Números por QR code</h2>
         <ul>
-          {conexoes.map((c) => {
+          {qr.map((c) => {
             const st = estado(c.id);
             return (
               <li key={c.id} className="border-t border-surface-line p-4 flex flex-wrap items-center gap-3">
                 <div className="min-w-[180px]">
                   <p className="font-semibold">{c.nome}</p>
-                  <p className="text-xs text-graphite">{sessoes[c.id]?.number ? `+${sessoes[c.id].number}` : c.tipo === "oficial" ? "API oficial" : "—"}</p>
+                  <p className="text-xs text-graphite">{sessoes[c.id]?.number ? `+${sessoes[c.id].number}` : "—"}</p>
                 </div>
                 <Badge tone={st === "conectado" ? "green" : st === "aguardando_qr" ? "orange" : "gray"}>{st === "conectado" ? "Conectado" : st === "aguardando_qr" ? "Aguardando QR" : "Desconectado"}</Badge>
                 <form action={alternarIA}><input type="hidden" name="conexao" value={c.id} />
@@ -54,6 +57,35 @@ export default async function ConfigWhatsApp() {
             );
           })}
         </ul>
+      </section>
+
+      <section className="card flex flex-col gap-4">
+        <div>
+          <h2 className="font-display font-bold text-lg">Números da API oficial (Meta)</h2>
+          <p className="text-sm text-graphite">O app da Meta (token, chave secreta e webhook) fica em <Link href="/integracoes" className="text-brand-text font-semibold underline">Integrações</Link>. Aqui você cadastra cada número desse app e escolhe quem usa. Número que mandar mensagem sem estar cadastrado aparece aqui sozinho.</p>
+          {!oficialOk && <p className="text-sm text-[#A0261C] mt-1">A API oficial ainda não está configurada em Integrações.</p>}
+        </div>
+        {oficiais.map((c) => (
+          <details key={c.id} className="rounded-xl border border-surface-line p-3">
+            <summary className="flex flex-wrap items-center gap-3 cursor-pointer min-h-[40px]">
+              <span className="font-semibold">{c.nome}</span>
+              <span className="text-sm text-graphite">{c.numero ?? `ID ${c.phoneNumberId ?? "?"}`}</span>
+              <span className="text-sm text-graphite">· {usuarios.find((u) => u.id === c.userId)?.name ?? "sem dono"}</span>
+              <span className="text-sm text-graphite">· IA {c.iaLigada ? "ligada" : "desligada"}</span>
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <OficialForm n={{ id: c.id, nome: c.nome, phoneNumberId: c.phoneNumberId, numero: c.numero, userId: c.userId, temToken: !!c.tokenCripto }} usuarios={usuarios} />
+              <div className="flex flex-wrap gap-3">
+                <form action={alternarIA}><input type="hidden" name="conexao" value={c.id} /><button className="btn-outline h-9 px-3 text-sm">{c.iaLigada ? "Desligar IA e automações" : "Ligar IA e automações"}</button></form>
+                <form action={removerOficial}><input type="hidden" name="conexao" value={c.id} /><button className="text-sm text-[#A0261C] font-semibold min-h-[36px]">Remover número</button></form>
+              </div>
+            </div>
+          </details>
+        ))}
+        <div className="border-t border-surface-line pt-3">
+          <p className="font-semibold mb-2">Cadastrar número oficial</p>
+          <OficialForm usuarios={usuarios} />
+        </div>
       </section>
 
       <section className="card flex flex-col gap-4">
