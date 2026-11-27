@@ -54,7 +54,8 @@ Para checar antes de subir: `npx tsc --noEmit -p .` e `npx next lint --dir src`.
 - **Uma conexão por usuário** (tabela `wa_conexoes`).
   - ids: `principal`, `u_<userId>` (QR), `of_<phoneNumberId>` (API oficial).
   - Cada usuário vê as suas conexões; o admin vê todas e configura a de qualquer usuário em `/whatsapp/conectar?u=<id>`.
-- `conexaoPara()` decide por qual número enviar: o que foi pedido → o do usuário → o da última conversa → o padrão (setting `whatsapp.conexaoPadrao`).
+- `conexaoPara()` decide por qual número enviar e **sempre prefere um número conectado** (`numeroParaEnviar`/`conexoesConectadas`): o que foi pedido → o conectado do usuário → o da última conversa → o padrão (setting `whatsapp.conexaoPadrao`) → qualquer conectado.
+- Mensagens do sistema (senha e avisos de frete dos entregadores) saem pelo WhatsApp conectado de quem clicou; se falhar, a tela mostra o motivo e a senha.
 - As conversas têm chave composta `(conexao_id, chat)`.
 - QR (Baileys):
   - Várias sessões: `/s/:id/{status,start,send,check,contato,logout}`, `GET /sessoes`, `MAX_SESSOES=15`.

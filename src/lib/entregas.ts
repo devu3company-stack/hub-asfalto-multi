@@ -7,7 +7,7 @@ import { db, schema } from "./db";
 import { appUrl } from "./email/envio";
 import { registrarNoHistorico } from "./frete/historico";
 import { sendMessage, setAiPaused } from "./whatsapp/service";
-import { conexaoPadrao } from "./whatsapp/conexoes";
+import { numeroParaEnviar } from "./whatsapp/conexoes";
 import { dispararDepois, linkComprovante } from "./automacoes/motor";
 
 /** Avisa as automações do cliente (entregador confirmado, saiu, entregue). */
@@ -64,7 +64,8 @@ async function candidatos(veiculo: string | null) {
 }
 
 async function whats(telefone: string, texto: string, userId?: string | null) {
-  const cx = await sendMessage(telefone, texto, "auto", { conexao: await conexaoPadrao(), userId });
+  // Sai pelo WhatsApp conectado de quem está usando o hub (ou pelo da última conversa com o entregador).
+  const cx = await sendMessage(telefone, texto, "auto", { conexao: await numeroParaEnviar({ userId, telefone }), userId });
   await setAiPaused(telefone, true, cx).catch(() => null); // a IA não responde aos entregadores
 }
 

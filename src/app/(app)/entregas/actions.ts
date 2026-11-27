@@ -12,7 +12,7 @@ import { avisar } from "@/lib/entregas";
 import { normalizarTelefone } from "@/lib/entregador-auth";
 import { analisar, normalizarVeiculo, VEICULOS } from "@/lib/frete/historico";
 import { sendMessage, setAiPaused } from "@/lib/whatsapp/service";
-import { conexaoPadrao } from "@/lib/whatsapp/conexoes";
+import { conexao, numeroParaEnviar } from "@/lib/whatsapp/conexoes";
 import type { FormMsg } from "@/components/ActionForm";
 import type { AnaliseJSON } from "@/components/AnaliseFrete";
 
@@ -82,9 +82,13 @@ const novoPin = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
 
 async function enviarAcesso(nome: string, telefone: string, pin: string, userId: string) {
   const msg = `Olá, ${nome.split(" ")[0]}! 👋\nVocê foi cadastrado no *app de fretes da Asfalto Multi*. Por ele você recebe e aceita os fretes disponíveis.\n\nAcesse: ${appUrl()}/entregador\nTelefone: ${telefone.replace(/^55/, "")}\nSenha: *${pin}*\n\nDica: no celular, abra o link e escolha "Adicionar à tela inicial".`;
-  const cx = await sendMessage(telefone, msg, "auto", { conexao: await conexaoPadrao(), userId });
+  // Sempre pelo WhatsApp conectado de quem clicou (se não tiver, pelo da conversa ou outro conectado).
+  const cx = await sendMessage(telefone, msg, "auto", { conexao: await numeroParaEnviar({ userId, telefone }), userId });
   await setAiPaused(telefone, true, cx).catch(() => null);
+  const c = await conexao(cx);
+  return c?.nome ?? cx;
 }
+const motivo = (e: unknown) => (e instanceof Error ? e.message : "erro desconhecido").slice(0, 160);
 
 export async function salvarEntregador(_p: FormMsg, f: FormData): Promise<FormMsg> {
   const u = await requireModule("entregas", "edit");
@@ -105,8 +109,8 @@ export async function salvarEntregador(_p: FormMsg, f: FormData): Promise<FormMs
   await audit(u.id, "entregas.entregador.criar", nome);
   revalidatePath("/entregas/entregadores");
   if (f.get("enviar") === "1") {
-    try { await enviarAcesso(nome, telefone, pin, u.id); return { ok: true, message: `${nome} cadastrado. O acesso foi enviado pelo WhatsApp.` }; }
-    catch { return { ok: true, message: `${nome} cadastrado, mas o WhatsApp não enviou. Senha: ${pin} — passe para ele.` }; }
+    try { const por = await enviarAcesso(nome, telefone, pin, u.id); return { ok: true, message: `${nome} cadastrado. O acesso foi enviado pelo WhatsApp (${por}).` }; }
+    catch (e) { return { ok: false, message: `${nome} cadastrado, mas o WhatsApp não enviou (${motivo(e)}). Senha: ${pin} — passe para a pessoa.` }; }
   }
   return { ok: true, message: `${nome} cadastrado. Senha de acesso: ${pin} (anote; ela não aparece de novo).` };
 }
@@ -118,8 +122,8 @@ export async function trocarSenha(_p: FormMsg, f: FormData): Promise<FormMsg> {
   const pin = novoPin();
   await db.update(D).set({ pinHash: await bcrypt.hash(pin, 10) }).where(eq(D.id, d.id));
   await audit(u.id, "entregas.entregador.senha", d.nome);
-  try { await enviarAcesso(d.nome, d.telefone, pin, u.id); return { ok: true, message: "Nova senha enviada pelo WhatsApp." }; }
-  catch { return { ok: true, message: `Nova senha: ${pin} — o WhatsApp não enviou, passe para ele.` }; }
+  try { const por = await enviarAcesso(d.nome, d.telefone, pin, u.id); return { ok: true, message: `Nova senha enviada pelo WhatsApp (${por}).` }; }
+  catch (e) { return { ok: false, message: `O WhatsApp não enviou (${motivo(e)}). Nova senha: ${pin} — passe para a pessoa.` }; }
 }
 
 export async function alternarAtivo(f: FormData) {
