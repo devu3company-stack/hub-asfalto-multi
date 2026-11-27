@@ -64,7 +64,7 @@ export async function salvarCampanha(_p: Msg, f: FormData): Promise<Msg> {
     if (!atual) return { ok: false, message: "Campanha não encontrada." };
     if (!["rascunho", "agendada"].includes(atual.status)) return { ok: false, message: "Esta campanha já foi enviada e não pode ser alterada." };
   }
-  const dados = { nome, assunto, conteudo, segmento, loja };
+  const dados = { nome, assunto, conteudo, segmento, loja, contaId: txt(f, "contaId") || null };
   let cid = id;
   if (cid) await db.update(schema.emailCampanhas).set(dados).where(eq(schema.emailCampanhas.id, cid));
   else cid = (await db.insert(schema.emailCampanhas).values({ ...dados, userId: u.id }).returning({ id: schema.emailCampanhas.id }))[0].id;
@@ -72,7 +72,7 @@ export async function salvarCampanha(_p: Msg, f: FormData): Promise<Msg> {
   if (acao === "teste") {
     const para = txt(f, "emailTeste").toLowerCase();
     if (!emailValido(para)) return { ok: false, message: "Informe um e-mail válido para o teste." };
-    try { await enviarTeste(loja, para, assunto, conteudo); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Falha no teste." }; }
+    try { await enviarTeste(loja, para, assunto, conteudo, dados.contaId); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Falha no teste." }; }
     revalidatePath("/email");
     if (!id) redirect(`/email/campanhas/${cid}?teste=1`);
     return { ok: true, message: `Teste enviado para ${para}.` };
@@ -143,7 +143,7 @@ export async function salvarAutomacaoForm(_p: Msg, f: FormData): Promise<Msg> {
     if (!Number.isFinite(esperaHoras) || esperaHoras < 0) return { ok: false, message: `E-mail ${i + 1}: prazo inválido.` };
     passos.push({ esperaHoras, assunto, conteudo });
   }
-  const config: AutomacaoConfig = { passos };
+  const config: AutomacaoConfig = { passos, contaId: txt(f, "contaId") || undefined };
   if (chave === "reativacao") {
     config.diasSemCompra = Math.max(15, Number(txt(f, "diasSemCompra")) || 120);
     config.intervaloDias = Math.max(15, Number(txt(f, "intervaloDias")) || 90);
@@ -166,7 +166,7 @@ export async function testarPasso(_p: Msg, f: FormData): Promise<Msg> {
   const { config } = await lerAutomacao(chave, loja);
   const p = config.passos[i];
   if (!p) return { ok: false, message: "Salve a automação antes de testar." };
-  try { await enviarTeste(loja, para, p.assunto, p.conteudo); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Falha." }; }
+  try { await enviarTeste(loja, para, p.assunto, p.conteudo, config.contaId); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Falha." }; }
   return { ok: true, message: `Teste enviado para ${para}.` };
 }
 

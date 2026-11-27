@@ -88,6 +88,7 @@ export const PASSOS: Record<string, { rotulo: string; campos: Campo[]; cor: stri
 };
 
 export const VARIAVEIS: { v: string; r: string }[] = [
+  { v: "{{cliente}}", r: "Como chamar o cliente (veja Identificação)" }, { v: "{{meu_nome}}", r: "Seu nome (veja Identificação)" }, { v: "{{empresa}}", r: "Nome da empresa" },
   { v: "{{primeiro_nome}}", r: "Primeiro nome" }, { v: "{{nome}}", r: "Nome completo" }, { v: "{{loja}}", r: "Nome da loja" },
   { v: "{{site}}", r: "Site da loja" }, { v: "{{pedido}}", r: "Número do pedido" }, { v: "{{valor}}", r: "Valor" },
   { v: "{{link_carrinho}}", r: "Link do carrinho" }, { v: "{{destino}}", r: "Cidade da entrega" }, { v: "{{entregador}}", r: "Nome do entregador" },

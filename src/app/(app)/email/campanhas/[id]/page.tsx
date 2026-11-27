@@ -11,6 +11,7 @@ import { PageHeader, Badge, Stat } from "@/components/ui";
 import { lojaValida, nomeLoja, type LojaId } from "@/lib/lojas";
 import { marcaDa } from "@/lib/email/envio";
 import CampanhaForm from "../CampanhaForm";
+import { listarContas } from "@/lib/email/contas";
 import { cancelarCampanha, excluirCampanha } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function Campanha({ params, searchParams }: { params: { id:
         <PageHeader title={`Nova campanha · ${nomeLoja(loja)}`} subtitle="Escreva o e-mail, escolha o público e envie ou agende.">
           <Link href={`/email?loja=${loja}`} className="btn-outline h-9 px-4">Voltar</Link>
         </PageHeader>
-        <CampanhaForm loja={loja} marca={await marcaDa(loja)} nome="" assunto="" conteudo={MODELO_CAMPANHA} segmento={{ compras: "todos" }} tags={tags} />
+        <CampanhaForm loja={loja} marca={await marcaDa(loja)} nome="" assunto="" conteudo={MODELO_CAMPANHA} segmento={{ compras: "todos" }} tags={tags} contas={await listarContas(true)} />
       </>
     );
   }
@@ -76,7 +77,7 @@ export default async function Campanha({ params, searchParams }: { params: { id:
       )}
 
       {editavel ? (
-        <CampanhaForm loja={c.loja} marca={await marcaDa(c.loja as LojaId)} id={c.id} nome={c.nome} assunto={c.assunto} conteudo={c.conteudo as EmailConteudo} segmento={c.segmento as Segmento} tags={tags} />
+        <CampanhaForm loja={c.loja} marca={await marcaDa(c.loja as LojaId)} id={c.id} nome={c.nome} assunto={c.assunto} conteudo={c.conteudo as EmailConteudo} segmento={c.segmento as Segmento} tags={tags} contas={await listarContas(true)} contaId={c.contaId} />
       ) : (
         recentes.length > 0 && (
           <section className="card flex flex-col gap-3">

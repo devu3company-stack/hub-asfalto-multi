@@ -216,10 +216,23 @@ export const contatos = pgTable("contatos", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("contatos_ultima_compra_idx").on(t.ultimaCompraEm)]);
 
+/** Contas de e-mail (SMTP) que podem enviar: cada campanha ou automação escolhe uma. */
+export const emailContas = pgTable("email_contas", {
+  id: id(),
+  nome: text("nome").notNull(), // rótulo interno (ex.: "Vendas — Rodrigo")
+  email: text("email").notNull(),
+  config: text("config").notNull(), // SMTP criptografado
+  ativo: boolean("ativo").notNull().default(true),
+  status: text("status").notNull().default("nao_testado"), // nao_testado | ok | erro
+  erro: text("erro"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Campanha manual (um e-mail para um segmento). */
 export const emailCampanhas = pgTable("email_campanhas", {
   id: id(),
   loja: text("loja").notNull().default("asfaltomulti"),
+  contaId: text("conta_id").references(() => emailContas.id, { onDelete: "set null" }),
   nome: text("nome").notNull(),
   assunto: text("assunto").notNull(),
   conteudo: jsonb("conteudo").notNull(), // EmailConteudo
@@ -243,7 +256,9 @@ export const emailAutomacoes = pgTable("email_automacoes", {
 /** Cada e-mail a enviar/enviado. Também é a fila. */
 export const emailEnvios = pgTable("email_envios", {
   id: id(),
-  loja: text("loja").notNull().default("asfaltomulti"), // define o servidor de envio (SMTP) usado
+  loja: text("loja").notNull().default("asfaltomulti"), // define o servidor de envio (SMTP) usado quando não há conta
+  contaId: text("conta_id").references(() => emailContas.id, { onDelete: "set null" }), // conta de e-mail escolhida
+  remetenteNome: text("remetente_nome"), // nome que aparece como remetente (ex.: "Rodrigo | Asfalto Multi")
   contatoId: text("contato_id").notNull().references(() => contatos.id, { onDelete: "cascade" }),
   campanhaId: text("campanha_id").references(() => emailCampanhas.id, { onDelete: "cascade" }),
   automacao: text("automacao"), // chave da automação + passo (ex.: "carrinho:0")
@@ -504,9 +519,21 @@ export const automacoes = pgTable("automacoes", {
   gatilhoConfig: jsonb("gatilho_config").$type<Record<string, unknown>>().notNull().default({}),
   passos: jsonb("passos").$type<{ id: string; tipo: string; config: Record<string, unknown> }[]>().notNull().default([]),
   modelo: text("modelo"),
+  /** Por onde e como a automação fala: número do WhatsApp, conta de e-mail, como chama o cliente e como se identifica. */
+  envio: jsonb("envio").$type<EnvioAutomacao>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type EnvioAutomacao = {
+  conexao?: string; // número do WhatsApp que recebe e envia ("" = automático)
+  emailConta?: string; // conta de e-mail que envia ("" = a da loja)
+  cliente?: "primeiro" | "completo" | "fixo"; // como chamar o cliente
+  clienteFixo?: string;
+  semNome?: string; // quando não sabe o nome
+  assinatura?: "" | "vendedor" | "dono" | "fixo"; // como se identificar
+  assinaturaFixa?: string;
+};
 
 export const automacaoExecucoes = pgTable("automacao_execucoes", {
   id: id(),

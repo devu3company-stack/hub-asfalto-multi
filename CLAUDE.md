@@ -13,7 +13,7 @@ Junta ERP Omie, Shopify, WhatsApp, CRM, fretes, entregas, e-mail marketing, auto
 
 ## Stack
 - Next.js 14 (App Router, `output: standalone`), Server Actions com `useFormState`, Tailwind
-- Drizzle ORM + postgres-js; migrações em `drizzle/` (0000–0014), rodadas por `scripts/migrate.ts`
+- Drizzle ORM + postgres-js; migrações em `drizzle/` (0000–0015), rodadas por `scripts/migrate.ts`
 - Gateway do WhatsApp em `whatsapp-gateway/index.mjs` (Baileys 6.7.x), container separado
 - Docker Compose: `docker-compose.yml` + `docker-compose.caddy.yml` (Caddy faz o HTTPS). Projeto compose: `hub-asfalto`
 - `src/instrumentation.ts` liga dois workers: e-mail + automações (a cada 60 s) e disparos (a cada 5 s)
@@ -124,6 +124,11 @@ Para checar antes de subir: `npx tsc --noEmit -p .` e `npx next lint --dir src`.
   - Gatilho por palavra-chave não repete antes de 12 h.
   - **Orçamento nunca vai direto**: entra na fila de aprovação do vendedor.
 - Públicos de anúncio (Meta/Google) em `/automacoes/publicos`.
+- **Envio e identificação** por automação (coluna `automacoes.envio`):
+  - Número do WhatsApp fixo: só reage às mensagens desse número e responde por ele, mesmo com a IA desligada lá.
+  - Conta de e-mail.
+  - Como chamar o cliente: `{{cliente}}`.
+  - Como se identificar: `{{meu_nome}}` (dono do número, vendedor responsável ou texto fixo). Também há `{{empresa}}`.
 
 ### Disparos em massa (`src/lib/disparos*.ts`, `src/app/(app)/disparos`) — perfil Marketing
 - Variáveis (nome, empresa), versões de texto (spintax) e vários números se revezando.
@@ -139,6 +144,7 @@ Para checar antes de subir: `npx tsc --noEmit -p .` e `npx next lint --dir src`.
 - Pedidos Shopify → Omie e estoque.
 - Manuais em PDF, consultados pela IA.
 - E-mail marketing próprio por SMTP: campanhas, carrinho abandonado, pós-compra e reativação.
+- **Várias contas de e-mail** (`email_contas`, tela E-mail › Contas de envio). Cada campanha e cada automação escolhe a conta; sem conta, usa o SMTP da loja em Integrações. A fila (`email_envios.conta_id`, `remetente_nome`) respeita os limites de cada conta.
 - Integrações (credenciais criptografadas com `ENCRYPTION_KEY`).
 
 ## Pendências e ideias em aberto

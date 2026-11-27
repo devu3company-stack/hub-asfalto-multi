@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import type { EmailConteudo, Marca } from "@/lib/email/template";
 import type { Segmento } from "@/lib/email/contatos";
 import ConteudoFields from "../ConteudoFields";
+import ContaEmailSelect from "@/components/ContaEmailSelect";
 import { contarPublico, salvarCampanha } from "../actions";
 
 function Botao({ acao, children, variante = "outline" }: { acao: string; children: React.ReactNode; variante?: "outline" | "primary" }) {
@@ -13,8 +14,9 @@ function Botao({ acao, children, variante = "outline" }: { acao: string; childre
 
 const ORIGENS = [["shopify", "Shopify"], ["omie", "Omie"], ["whatsapp", "WhatsApp"], ["planilha", "Planilha"], ["formulario", "Formulário do site"], ["manual", "Manual"]];
 
-export default function CampanhaForm({ loja, marca, id, nome, assunto, conteudo, segmento, tags }: {
+export default function CampanhaForm({ loja, marca, id, nome, assunto, conteudo, segmento, tags, contas, contaId }: {
   loja: string; marca: Marca; id?: string; nome: string; assunto: string; conteudo: EmailConteudo; segmento: Segmento; tags: string[];
+  contas: { id: string; nome: string; email: string }[]; contaId?: string | null;
 }) {
   const [state, action] = useFormState(salvarCampanha, undefined);
   const [publico, setPublico] = useState<number | null>(null);
@@ -44,6 +46,7 @@ export default function CampanhaForm({ loja, marca, id, nome, assunto, conteudo,
             <label htmlFor="nome" className="label">Nome interno <span className="text-graphite-muted font-normal">(só aparece no hub)</span></label>
             <input id="nome" name="nome" defaultValue={nome} className="input" placeholder="Promoção de dezembro" />
           </div>
+          <ContaEmailSelect id="contaId" contas={contas} valor={contaId} />
         </div>
         <ConteudoFields inicial={conteudo} marca={marca} />
       </section>

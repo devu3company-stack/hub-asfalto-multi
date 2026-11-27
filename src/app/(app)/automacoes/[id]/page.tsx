@@ -8,6 +8,7 @@ import { LOJAS } from "@/lib/lojas";
 import { MODELOS, resumoGatilho, resumoPasso } from "@/lib/automacoes/definicoes";
 import { PageHeader, Badge } from "@/components/ui";
 import Editor from "./Editor";
+import { listarContas } from "@/lib/email/contas";
 import { cancelarExecucao, excluir } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,14 @@ export default async function Automacao({ params, searchParams }: { params: { id
   const editor = can(user.role, "automacoes", "edit");
   const a = await db.query.automacoes.findFirst({ where: eq(schema.automacoes.id, params.id) });
   if (!a) notFound();
-  const [execs, etapas] = await Promise.all([
+  const [execs, etapas, cxs, contas] = await Promise.all([
     db.query.automacaoExecucoes.findMany({ where: eq(X.automacaoId, a.id), orderBy: desc(X.createdAt), limit: 50 }),
     db.query.crmEtapas.findMany({ columns: { nome: true } }),
+    db.select({ id: schema.waConexoes.id, nome: schema.waConexoes.nome, tipo: schema.waConexoes.tipo, numero: schema.waConexoes.numero, dono: schema.users.name })
+      .from(schema.waConexoes).leftJoin(schema.users, eq(schema.users.id, schema.waConexoes.userId)),
+    listarContas(true),
   ]);
+  const numeros = cxs.map((c) => ({ id: c.id, nome: c.nome, detalhe: [c.tipo === "oficial" ? "API oficial" : "QR", c.dono, c.numero].filter(Boolean).join(" · ") }));
   const modelo = MODELOS.find((m) => m.chave === a.modelo);
   return (
     <>
@@ -33,8 +38,9 @@ export default async function Automacao({ params, searchParams }: { params: { id
       </PageHeader>
       {searchParams.novo && <p role="status" className="card text-sm">{modelo ? `Modelo "${modelo.nome}" copiado. ` : ""}Revise as mensagens, marque <strong>Automação ligada</strong> e salve.</p>}
       {editor ? (
-        <Editor id={a.id} etapas={[...new Set(etapas.map((e) => e.nome))]} lojas={LOJAS.map((l) => ({ id: l.id, nome: l.nome }))}
-          inicial={{ nome: a.nome, grupo: a.grupo, ativa: a.ativa, gatilho: a.gatilho, gatilhoConfig: a.gatilhoConfig, passos: a.passos }} />
+        <Editor id={a.id} etapas={[...new Set(etapas.map((e) => e.nome))]} lojas={LOJAS.map((l) => ({ id: l.id, nome: l.nome }))} numeros={numeros}
+          contas={contas.map((c) => ({ id: c.id, nome: c.nome, detalhe: c.email }))}
+          inicial={{ nome: a.nome, grupo: a.grupo, ativa: a.ativa, gatilho: a.gatilho, gatilhoConfig: a.gatilhoConfig, passos: a.passos, envio: a.envio ?? {} }} />
       ) : (
         <ol className="card list-decimal pl-8 text-sm flex flex-col gap-1">{a.passos.map((p) => <li key={p.id}>{resumoPasso(p)}</li>)}</ol>
       )}

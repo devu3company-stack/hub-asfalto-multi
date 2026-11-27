@@ -10,8 +10,16 @@ import { rascunhoIA, responderComIA, sendMessage } from "../whatsapp/service";
 import { GATILHOS, type Passo } from "./definicoes";
 import { conexao as lerConexao, conexaoPara } from "../whatsapp/conexoes";
 
-/** Número por onde a automação fala: o da conversa, o do vendedor da negociação ou o padrão. Só se a IA/automações estiverem ligadas nele. */
-async function numeroDaAutomacao(ctx: Contexto, chat: string) {
+/**
+ * Número por onde a automação fala. Se a automação escolheu um número, é ele (mesmo com a IA desligada lá).
+ * Senão: o da conversa, o do vendedor da negociação ou o padrão — e só se as automações estiverem ligadas nele.
+ */
+async function numeroDaAutomacao(a: Auto, ctx: Contexto, chat: string) {
+  const fixo = a.envio?.conexao;
+  if (fixo) {
+    const cx = await lerConexao(fixo);
+    if (cx) return { id: cx.id, ligado: true, nome: cx.nome };
+  }
   let vendedor = ctx.vendedorId ? String(ctx.vendedorId) : null;
   if (!ctx.conexao && !vendedor && ctx.negociacaoId) {
     const n = await db.query.crmNegociacoes.findFirst({ where: eq(N.id, String(ctx.negociacaoId)), columns: { responsavelId: true } });
@@ -43,6 +51,8 @@ const reais = (n: number) => n.toLocaleString("pt-BR", { style: "currency", curr
 function combina(a: Auto, ctx: Contexto) {
   const c = a.gatilhoConfig ?? {};
   if (c.loja && ctx.loja && c.loja !== ctx.loja) return false;
+  // Automação presa a um número: só reage às mensagens que chegam nele.
+  if (a.gatilho === "whatsapp.mensagem" && a.envio?.conexao && ctx.conexao && a.envio.conexao !== ctx.conexao) return false;
   switch (a.gatilho) {
     case "whatsapp.mensagem": {
       const ps = ((c.palavras as string[] | undefined) ?? []).map((p) => norm(p.trim())).filter(Boolean);
@@ -60,8 +70,9 @@ function combina(a: Auto, ctx: Contexto) {
  * Chamado pelos eventos do Hub. Começa a automação para cada regra ativa que combina.
  * Devolve quantas começaram (o WhatsApp usa isso para a IA não responder por cima).
  */
-export async function disparar(gatilho: string, ctx: Contexto, chave: string) {
-  const autos = (await db.query.automacoes.findMany({ where: and(eq(A.ativa, true), eq(A.gatilho, gatilho)) })).filter((a) => combina(a, ctx));
+export async function disparar(gatilho: string, ctx: Contexto, chave: string, opts: { soDoNumero?: boolean } = {}) {
+  const autos = (await db.query.automacoes.findMany({ where: and(eq(A.ativa, true), eq(A.gatilho, gatilho)) }))
+    .filter((a) => combina(a, ctx) && (!opts.soDoNumero || (!!a.envio?.conexao && a.envio.conexao === ctx.conexao)));
   let n = 0;
   for (const a of autos) {
     // Palavra-chave: não repete a mesma automação na mesma conversa em 12 horas.
@@ -122,12 +133,36 @@ export async function processar(execId: string) {
 
 // ───────── Variáveis ─────────
 
-async function variaveis(ctx: Contexto) {
+/** Nome de quem fala pela automação, conforme "Como se identificar". */
+async function meuNome(a: Auto, ctx: Contexto) {
+  const env = a.envio ?? {};
+  if (env.assinatura === "fixo") return (env.assinaturaFixa ?? "").trim();
+  const nomeDe = async (id: string | null | undefined) =>
+    id ? (await db.query.users.findFirst({ where: eq(schema.users.id, id), columns: { name: true } }))?.name ?? "" : "";
+  if (env.assinatura === "vendedor") {
+    let vend = ctx.vendedorId ? String(ctx.vendedorId) : null;
+    if (!vend && ctx.negociacaoId) vend = (await db.query.crmNegociacoes.findFirst({ where: eq(N.id, String(ctx.negociacaoId)), columns: { responsavelId: true } }))?.responsavelId ?? null;
+    if (vend) return nomeDe(vend);
+  }
+  // dono do número que envia (também é o reserva do "vendedor")
+  const cxId = env.conexao || (ctx.conexao ? String(ctx.conexao) : null);
+  const cx = cxId ? await lerConexao(cxId) : null;
+  return cx?.userId ? nomeDe(cx.userId) : "";
+}
+
+async function variaveis(ctx: Contexto, a?: Auto) {
   const loja = lojaValida(String(ctx.loja ?? "asfaltomulti"));
   const marca = await marcaDa(loja);
   const nome = String(ctx.nome ?? "").trim();
+  const env = a?.envio ?? {};
+  const primeiro = nome.split(/\s+/)[0] || "";
+  // Como chamar o cliente: {{cliente}}
+  const cliente = env.cliente === "fixo" ? (env.clienteFixo ?? "").trim()
+    : (env.cliente === "completo" ? nome : primeiro) || (env.semNome ?? "").trim();
+  const eu = a ? await meuNome(a, ctx) : "";
   return {
-    nome, primeiro_nome: nome.split(/\s+/)[0] || "",
+    cliente, meu_nome: eu, empresa: marca.nome ?? nomeLoja(loja),
+    nome, primeiro_nome: primeiro,
     loja: marca.nome ?? nomeLoja(loja), site: marca.site ?? "", pedido: String(ctx.pedido ?? ""),
     valor: typeof ctx.valor === "number" ? reais(ctx.valor) : String(ctx.valor ?? ""), link_carrinho: String(ctx.linkCarrinho ?? ""),
     destino: String(ctx.destino ?? ""), entregador: String(ctx.entregador ?? ""), link_comprovante: String(ctx.linkComprovante ?? ""),
@@ -138,6 +173,9 @@ function aplicar(t: string, v: Record<string, string>) {
   // Sem nome: "Oi, {{primeiro_nome}}!" vira "Oi!" e "{{primeiro_nome}}, tudo certo?" vira "Tudo certo?".
   if (!v.primeiro_nome) {
     t = t.replace(/,\s*\{\{\s*(primeiro_)?nome\s*\}\}/g, "").replace(/^\s*\{\{\s*(primeiro_)?nome\s*\}\}\s*,?\s*(\p{L})/u, (_m, _p, l: string) => l.toUpperCase());
+  }
+  if (!v.cliente) {
+    t = t.replace(/,\s*\{\{\s*cliente\s*\}\}/g, "").replace(/^\s*\{\{\s*cliente\s*\}\}\s*,?\s*(\p{L})/u, (_m, l: string) => l.toUpperCase());
   }
   return t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => v[k] ?? "").replace(/[ \t]{2,}/g, " ").trim();
 }
@@ -223,10 +261,10 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
       if (!chat) return { acao: "seguir", texto: "Pulou o WhatsApp: cliente sem telefone" };
       const conversa = await db.query.waChats.findFirst({ where: and(eq(schema.waChats.chat, chat), eq(schema.waChats.optout, true)), columns: { optout: true } });
       if (conversa?.optout && a.grupo !== "frete") return { acao: "seguir", texto: "Pulou o WhatsApp: cliente pediu para sair" };
-      const numero = await numeroDaAutomacao(ctx, chat);
+      const numero = await numeroDaAutomacao(a, ctx, chat);
       if (!numero.ligado) return { acao: "seguir", texto: `Pulou o WhatsApp: automações desligadas no número de ${numero.nome}` };
       if (a.grupo !== "frete") { const ate = foraDoHorario(); if (ate) return { acao: "esperar", ate, repetir: true, texto: "Fora do horário (8h–20h): envia às 8h" }; }
-      const texto = aplicar(String(c.texto ?? ""), await variaveis(ctx));
+      const texto = aplicar(String(c.texto ?? ""), await variaveis(ctx, a));
       if (!texto) return { acao: "seguir", texto: "Mensagem vazia" };
       if (c.aprovacao) {
         await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, conexaoId: numero.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null, texto });
@@ -238,7 +276,7 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
 
     case "orcamento": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
-      const numero = await numeroDaAutomacao(ctx, chat);
+      const numero = await numeroDaAutomacao(a, ctx, chat);
       const sugestao = await rascunhoIA(chat, `Tarefa agora: ${String(c.instrucao ?? "")} A resposta será revisada por um vendedor antes de ir para o cliente.`, numero.id).catch(() => null);
       await db.insert(AP).values({ execucaoId: e.id, automacaoId: a.id, conexaoId: numero.id, chat, nome: ctx.nome ? String(ctx.nome) : null, pedido: ctx.texto ? String(ctx.texto) : null,
         texto: sugestao || `Olá${ctx.nome ? `, ${String(ctx.nome).split(" ")[0]}` : ""}! Vou preparar seu orçamento. Pode me confirmar a quantidade e o CEP de entrega?` });
@@ -249,7 +287,7 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
       const [r] = await buscar(String(ctx.texto ?? ""), { soIA: true, limite: 1 });
       if (!r) return { acao: "seguir", texto: "Nenhum manual com esse assunto" };
-      const numero = await numeroDaAutomacao(ctx, chat);
+      const numero = await numeroDaAutomacao(a, ctx, chat);
       if (!numero.ligado) return { acao: "seguir", texto: `Pulou: automações desligadas no número de ${numero.nome}` };
       await sendMessage(chat, `Sobre isso, o manual *${r.titulo}* (pág. ${r.pagina}) diz:\n\n${r.trecho.slice(0, 900)}`, "auto", { conexao: numero.id });
       if (c.pdf !== false) {
@@ -263,14 +301,14 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
     }
     case "pesquisa_nps": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
-      const numero = await numeroDaAutomacao(ctx, chat);
+      const numero = await numeroDaAutomacao(a, ctx, chat);
       if (!numero.ligado) return { acao: "seguir", texto: `Pulou: automações desligadas no número de ${numero.nome}` };
       const { enviarNps } = await import("../whatsapp/atendimento");
       return (await enviarNps(numero.id, chat, "automacao")) ? { acao: "seguir", texto: "Pesquisa NPS enviada" } : { acao: "seguir", texto: "Pesquisa NPS desligada nas configurações" };
     }
     case "responder_ia": {
       if (!chat) return { acao: "seguir", texto: "Sem WhatsApp" };
-      const numero = await numeroDaAutomacao(ctx, chat);
+      const numero = await numeroDaAutomacao(a, ctx, chat);
       if (!numero.ligado) return { acao: "seguir", texto: `Pulou: IA desligada no número de ${numero.nome}` };
       return (await responderComIA(chat, numero.id)) ? { acao: "seguir", texto: "A IA respondeu" } : { acao: "seguir", texto: "IA não configurada" };
     }
@@ -280,22 +318,23 @@ async function executar(p: Passo, e: Exec, a: Auto, ctx: Contexto): Promise<Resu
       const loja = lojaValida(String(ctx.loja ?? "asfaltomulti"));
       const contato = await salvarContato({ email: String(ctx.email), nome: ctx.nome ? String(ctx.nome) : null, telefone: ctx.telefone ? String(ctx.telefone) : null, origem: "manual", loja });
       if (!contato) return { acao: "seguir", texto: "E-mail inválido" };
-      const v = await variaveis(ctx);
+      const v = await variaveis(ctx, a);
       const r = await enfileirar(contato, aplicar(String(c.assunto ?? ""), v), {
         titulo: aplicar(String(c.titulo ?? c.assunto ?? ""), v), texto: aplicar(String(c.texto ?? ""), v),
         botaoTexto: c.botaoTexto ? String(c.botaoTexto) : undefined, botaoUrl: c.botaoUrl ? aplicar(String(c.botaoUrl), v) : undefined,
-      }, { loja, automacao: `auto:${a.id}`, referencia: `auto:${e.id}:${p.id}`, extra: v });
+      }, { loja, automacao: `auto:${a.id}`, referencia: `auto:${e.id}:${p.id}`, extra: v, contaId: a.envio?.emailConta || null,
+        remetenteNome: a.envio?.assinatura && v.meu_nome ? `${v.meu_nome} | ${v.empresa}` : null });
       return { acao: "seguir", texto: r ? `E-mail na fila: ${String(c.assunto ?? "")}` : "Pulou o e-mail: contato descadastrado" };
     }
 
     case "criar_lead": {
-      const r = await criarLead(ctx, c.titulo ? aplicar(String(c.titulo), await variaveis(ctx)) : undefined);
+      const r = await criarLead(ctx, c.titulo ? aplicar(String(c.titulo), await variaveis(ctx, a)) : undefined);
       return { acao: "seguir", texto: r.novo ? "Lead criado no funil" : "Lead já existia" };
     }
     case "tarefa": {
       const { n } = await criarLead(ctx);
       const quando = new Date(Date.now() + (Number(c.prazoHoras) || 0) * 3600_000);
-      await db.insert(schema.crmTarefas).values({ negociacaoId: n.id, tipo: String(c.tipo ?? "tarefa"), descricao: aplicar(String(c.descricao ?? "Tarefa da automação"), await variaveis(ctx)),
+      await db.insert(schema.crmTarefas).values({ negociacaoId: n.id, tipo: String(c.tipo ?? "tarefa"), descricao: aplicar(String(c.descricao ?? "Tarefa da automação"), await variaveis(ctx, a)),
         quando, responsavelId: n.responsavelId ?? null });
       return { acao: "seguir", texto: `Tarefa criada: ${String(c.descricao ?? "")}` };
     }

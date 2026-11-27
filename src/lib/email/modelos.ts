@@ -3,7 +3,7 @@ import type { EmailConteudo } from "./template";
 /** Modelos prontos. O texto é um ponto de partida: o time ajusta na tela de Automações/Campanhas. */
 
 export type Passo = { esperaHoras: number; assunto: string; conteudo: EmailConteudo };
-export type AutomacaoConfig = { passos: Passo[]; diasSemCompra?: number; intervaloDias?: number };
+export type AutomacaoConfig = { passos: Passo[]; diasSemCompra?: number; intervaloDias?: number; contaId?: string };
 export type AutomacaoChave = "carrinho" | "poscompra" | "reativacao";
 
 export const AUTOMACOES: Record<AutomacaoChave, { nome: string; descricao: string; padrao: AutomacaoConfig }> = {

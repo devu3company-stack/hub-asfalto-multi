@@ -10,6 +10,7 @@ import LojaTabs from "@/components/LojaTabs";
 import { lojaValida } from "@/lib/lojas";
 import { marcaDa } from "@/lib/email/envio";
 import AutomacaoForm from "./AutomacaoForm";
+import { listarContas } from "@/lib/email/contas";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,13 @@ export default async function Automacoes({ searchParams }: { searchParams: { loj
   const marca = await marcaDa(loja);
   const editor = can(user.role, "email", "edit");
   const chaves = Object.keys(AUTOMACOES) as AutomacaoChave[];
-  const [estados, stats] = await Promise.all([
+  const [estados, stats, contas] = await Promise.all([
     Promise.all(chaves.map((k) => lerAutomacao(k, loja))),
     db.execute<{ k: string; enviados: number; abertos: number; cliques: number; fila: number }>(sql`
       select split_part(automacao, ':', 1) k, count(*) filter (where status='enviado')::int enviados, count(aberto_em)::int abertos,
              count(clicado_em)::int cliques, count(*) filter (where status='fila')::int fila
       from email_envios where automacao is not null and loja = ${loja} and created_at > now() - interval '30 days' group by 1`),
+    listarContas(true),
   ]);
   const porK = new Map((stats as unknown as { k: string; enviados: number; abertos: number; cliques: number; fila: number }[]).map((s) => [s.k, s]));
   const appUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
@@ -60,7 +62,7 @@ export default async function Automacoes({ searchParams }: { searchParams: { loj
             <div className="mt-4 flex flex-col gap-3">
               <p className="text-xs text-graphite-muted">{REQUISITO[k]}{k !== "reativacao" && ` Endereço do webhook: ${appUrl}/api/webhooks/shopify`}</p>
               {editor
-                ? <AutomacaoForm key={`${loja}-${k}`} loja={loja} marca={marca} chave={k} ativo={e.ativo} config={e.config} padrao={AUTOMACOES[k].padrao} variaveis={VARS[k]} />
+                ? <AutomacaoForm key={`${loja}-${k}`} loja={loja} marca={marca} chave={k} ativo={e.ativo} config={e.config} padrao={AUTOMACOES[k].padrao} variaveis={VARS[k]} contas={contas} />
                 : <p className="text-sm text-graphite">Você pode ver, mas não editar as automações.</p>}
             </div>
           </details>

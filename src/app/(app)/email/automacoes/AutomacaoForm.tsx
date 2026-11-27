@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import type { AutomacaoChave, AutomacaoConfig, Passo } from "@/lib/email/modelos";
 import type { Marca } from "@/lib/email/template";
 import ConteudoFields from "../ConteudoFields";
+import ContaEmailSelect from "@/components/ContaEmailSelect";
 import { salvarAutomacaoForm, testarPasso } from "../actions";
 
 function Salvar() {
@@ -23,8 +24,9 @@ function Teste({ chave, i, loja }: { chave: AutomacaoChave; i: number; loja: str
   );
 }
 
-export default function AutomacaoForm({ loja, marca, chave, ativo, config, padrao, variaveis }: {
+export default function AutomacaoForm({ loja, marca, chave, ativo, config, padrao, variaveis, contas }: {
   loja: string; marca: Marca; chave: AutomacaoChave; ativo: boolean; config: AutomacaoConfig; padrao: AutomacaoConfig; variaveis: string[];
+  contas: { id: string; nome: string; email: string }[];
 }) {
   const [state, action] = useFormState(salvarAutomacaoForm, undefined);
   const [passos, setPassos] = useState<Passo[]>(config.passos);
@@ -43,6 +45,7 @@ export default function AutomacaoForm({ loja, marca, chave, ativo, config, padra
               <option value="sim">Ligada</option><option value="nao">Desligada</option>
             </select>
           </div>
+          <ContaEmailSelect id={`conta_${chave}`} contas={contas} valor={config.contaId} />
           {chave === "reativacao" && (
             <>
               <div>

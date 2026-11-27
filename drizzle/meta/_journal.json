@@ -106,6 +106,13 @@
       "when": 1795690965116,
       "tag": "0014_oficial_varios",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1795781498613,
+      "tag": "0015_contas_email_envio_automacao",
+      "breakpoints": true
     }
   ]
 }

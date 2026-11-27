@@ -7,6 +7,16 @@ import { db, schema } from "@/lib/db";
 import { GATILHOS, GRUPOS, MODELOS, PASSOS, novoId, type Passo } from "@/lib/automacoes/definicoes";
 import { sendMessage } from "@/lib/whatsapp/service";
 import type { FormMsg } from "@/components/ActionForm";
+import type { EnvioAutomacao } from "@/db/schema";
+
+const s80 = (v: unknown) => String(v ?? "").trim().slice(0, 80);
+function limparEnvio(e: EnvioAutomacao = {}): EnvioAutomacao {
+  return {
+    conexao: s80(e.conexao) || undefined, emailConta: s80(e.emailConta) || undefined,
+    cliente: e.cliente === "completo" || e.cliente === "fixo" ? e.cliente : "primeiro", clienteFixo: s80(e.clienteFixo) || undefined, semNome: s80(e.semNome) || undefined,
+    assinatura: e.assinatura === "vendedor" || e.assinatura === "fixo" ? e.assinatura : "", assinaturaFixa: s80(e.assinaturaFixa) || undefined,
+  };
+}
 
 const A = schema.automacoes, X = schema.automacaoExecucoes, AP = schema.automacaoAprovacoes;
 
@@ -28,14 +38,18 @@ export async function criarEmBranco() {
 
 export async function salvar(_p: FormMsg, f: FormData): Promise<FormMsg> {
   const u = await requireModule("automacoes", "edit");
-  let d: { nome: string; grupo: string; gatilho: string; gatilhoConfig: Record<string, unknown>; passos: Passo[]; ativa: boolean };
+  let d: { nome: string; grupo: string; gatilho: string; gatilhoConfig: Record<string, unknown>; passos: Passo[]; ativa: boolean; envio?: EnvioAutomacao };
   try { d = JSON.parse(String(f.get("dados"))); } catch { return { ok: false, message: "Dados inválidos." }; }
   if (!d.nome?.trim()) return { ok: false, message: "Dê um nome para a automação." };
   if (!GATILHOS[d.gatilho]) return { ok: false, message: "Escolha o gatilho." };
   const passos = (d.passos ?? []).filter((p) => PASSOS[p.tipo]).map((p) => ({ id: p.id || novoId(), tipo: p.tipo, config: p.config ?? {} }));
   if (d.ativa && !passos.length) return { ok: false, message: "Adicione pelo menos um passo antes de ativar." };
   if (d.ativa && passos.some((p) => p.tipo === "whatsapp" && !String(p.config.texto ?? "").trim())) return { ok: false, message: "Tem passo de WhatsApp sem mensagem." };
-  await db.update(A).set({ nome: d.nome.trim(), grupo: GRUPOS[d.grupo] ? d.grupo : "geral", gatilho: d.gatilho, gatilhoConfig: d.gatilhoConfig ?? {}, passos, ativa: !!d.ativa, updatedAt: new Date() })
+  const envio = limparEnvio(d.envio);
+  if (envio.cliente === "fixo" && !envio.clienteFixo) return { ok: false, message: "Escreva como chamar o cliente." };
+  if (envio.assinatura === "fixo" && !envio.assinaturaFixa) return { ok: false, message: "Escreva o nome com que você se identifica." };
+  if (envio.conexao && !(await db.query.waConexoes.findFirst({ where: eq(schema.waConexoes.id, envio.conexao), columns: { id: true } }))) return { ok: false, message: "O número de WhatsApp escolhido não existe mais." };
+  await db.update(A).set({ nome: d.nome.trim(), grupo: GRUPOS[d.grupo] ? d.grupo : "geral", gatilho: d.gatilho, gatilhoConfig: d.gatilhoConfig ?? {}, passos, envio, ativa: !!d.ativa, updatedAt: new Date() })
     .where(eq(A.id, String(f.get("id"))));
   await audit(u.id, "automacoes.salvar", d.nome);
   revalidatePath("/automacoes");

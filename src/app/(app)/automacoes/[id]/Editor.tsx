@@ -4,7 +4,10 @@ import ActionForm from "@/components/ActionForm";
 import { GATILHOS, GRUPOS, PASSOS, VARIAVEIS, novoId, type Campo, type Passo } from "@/lib/automacoes/definicoes";
 import { salvar } from "../actions";
 
-type Dados = { nome: string; grupo: string; ativa: boolean; gatilho: string; gatilhoConfig: Record<string, unknown>; passos: Passo[] };
+import type { EnvioAutomacao } from "@/db/schema";
+
+type Dados = { nome: string; grupo: string; ativa: boolean; gatilho: string; gatilhoConfig: Record<string, unknown>; passos: Passo[]; envio: EnvioAutomacao };
+type Opcao = { id: string; nome: string; detalhe?: string };
 
 function CampoInput({ c, valor, onChange, etapas, lojas, idBase }: { c: Campo; valor: unknown; onChange: (v: unknown) => void; etapas: string[]; lojas: { id: string; nome: string }[]; idBase: string }) {
   const id = `${idBase}-${c.k}`;
@@ -31,12 +34,16 @@ function CampoInput({ c, valor, onChange, etapas, lojas, idBase }: { c: Campo; v
   }
 }
 
-export default function Editor({ id, inicial, etapas, lojas }: { id: string; inicial: Dados; etapas: string[]; lojas: { id: string; nome: string }[] }) {
+export default function Editor({ id, inicial, etapas, lojas, numeros, contas }: { id: string; inicial: Dados; etapas: string[]; lojas: { id: string; nome: string }[]; numeros: Opcao[]; contas: Opcao[] }) {
   const [d, setD] = useState<Dados>(inicial);
   const set = (p: Partial<Dados>) => setD((x) => ({ ...x, ...p }));
   const setPasso = (i: number, p: Partial<Passo>) => set({ passos: d.passos.map((s, j) => (j === i ? { ...s, ...p } : s)) });
   const mover = (i: number, k: number) => { const ps = [...d.passos]; const [x] = ps.splice(i, 1); ps.splice(i + k, 0, x); set({ passos: ps }); };
   const g = GATILHOS[d.gatilho];
+  const env = d.envio ?? {};
+  const setEnv = (p: Partial<EnvioAutomacao>) => set({ envio: { ...env, ...p } });
+  const usaWpp = d.gatilho === "whatsapp.mensagem" || d.passos.some((s) => ["whatsapp", "orcamento", "enviar_manual", "responder_ia", "pesquisa_nps"].includes(s.tipo));
+  const usaEmail = d.passos.some((s) => s.tipo === "email");
 
   return (
     <ActionForm action={salvar} label="Salvar automação">
@@ -59,6 +66,61 @@ export default function Editor({ id, inicial, etapas, lojas }: { id: string; ini
           {g?.campos.map((c) => <CampoInput key={c.k} c={c} idBase="g" valor={d.gatilhoConfig[c.k]} etapas={etapas} lojas={lojas}
             onChange={(v) => set({ gatilhoConfig: { ...d.gatilhoConfig, [c.k]: v } })} />)}
         </div>
+      </section>
+
+      <section className="card flex flex-col gap-3 border-l-4 border-l-[#2563EB]">
+        <h2 className="font-display font-bold text-lg">Envio e identificação</h2>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="env-conexao" className="label">Número do WhatsApp</label>
+            <select id="env-conexao" value={env.conexao ?? ""} onChange={(e) => setEnv({ conexao: e.target.value })} className="input">
+              <option value="">Automático (o da conversa ou do vendedor)</option>
+              {numeros.map((n) => <option key={n.id} value={n.id}>{n.nome}{n.detalhe ? ` — ${n.detalhe}` : ""}</option>)}
+            </select>
+            <p className="text-xs text-graphite-muted mt-1">
+              {env.conexao ? (d.gatilho === "whatsapp.mensagem" ? "Só reage às mensagens que chegam neste número e responde por ele, mesmo com a IA desligada lá." : "As mensagens saem sempre por este número.")
+                : "Usa o número da conversa; sem conversa, o do vendedor da negociação ou o número padrão."}{!usaWpp && " (Esta automação ainda não tem passo de WhatsApp.)"}
+            </p>
+          </div>
+          <div>
+            <label htmlFor="env-email" className="label">Conta de e-mail</label>
+            <select id="env-email" value={env.emailConta ?? ""} onChange={(e) => setEnv({ emailConta: e.target.value })} className="input">
+              <option value="">Servidor da loja (Integrações)</option>
+              {contas.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.detalhe ? ` — ${c.detalhe}` : ""}</option>)}
+            </select>
+            <p className="text-xs text-graphite-muted mt-1">{contas.length ? "" : "Cadastre mais contas em E-mail marketing › Contas de envio. "}{!usaEmail && "(Esta automação ainda não tem passo de e-mail.)"}</p>
+          </div>
+          <div>
+            <label htmlFor="env-cliente" className="label">Como chamar o cliente <code className="font-normal">{"{{cliente}}"}</code></label>
+            <select id="env-cliente" value={env.cliente ?? "primeiro"} onChange={(e) => setEnv({ cliente: e.target.value as EnvioAutomacao["cliente"] })} className="input">
+              <option value="primeiro">Primeiro nome (ex.: Maria)</option>
+              <option value="completo">Nome completo (ex.: Maria Souza)</option>
+              <option value="fixo">Um texto meu (ex.: &quot;cliente&quot;, &quot;parceiro&quot;)</option>
+            </select>
+          </div>
+          {env.cliente === "fixo" ? (
+            <div><label htmlFor="env-cliente-fixo" className="label">Texto para chamar o cliente</label>
+              <input id="env-cliente-fixo" value={env.clienteFixo ?? ""} onChange={(e) => setEnv({ clienteFixo: e.target.value })} className="input" placeholder="cliente" /></div>
+          ) : (
+            <div><label htmlFor="env-sem-nome" className="label">Quando não souber o nome</label>
+              <input id="env-sem-nome" value={env.semNome ?? ""} onChange={(e) => setEnv({ semNome: e.target.value })} className="input" placeholder="Em branco: tira o nome da frase" /></div>
+          )}
+          <div>
+            <label htmlFor="env-assinatura" className="label">Como você se identifica <code className="font-normal">{"{{meu_nome}}"}</code></label>
+            <select id="env-assinatura" value={env.assinatura ?? ""} onChange={(e) => setEnv({ assinatura: e.target.value as EnvioAutomacao["assinatura"] })} className="input">
+              <option value="">Nome do dono do número que envia</option>
+              <option value="vendedor">Nome do vendedor responsável pela negociação</option>
+              <option value="fixo">Um nome que eu escrevo</option>
+            </select>
+          </div>
+          {env.assinatura === "fixo" && (
+            <div><label htmlFor="env-assinatura-fixa" className="label">Seu nome nas mensagens</label>
+              <input id="env-assinatura-fixa" value={env.assinaturaFixa ?? ""} onChange={(e) => setEnv({ assinaturaFixa: e.target.value })} className="input" placeholder="Ex.: Rodrigo, da Asfalto Multi" /></div>
+          )}
+        </div>
+        <p className="text-xs text-graphite-muted">
+          Exemplo: &quot;Olá, {"{{cliente}}"}! Aqui é {"{{meu_nome}}"}, da {"{{empresa}}"}.&quot; Nos e-mails, quando você escolhe como se identificar, o remetente aparece como &quot;seu nome | empresa&quot;.
+        </p>
       </section>
 
       <ol className="flex flex-col gap-3">

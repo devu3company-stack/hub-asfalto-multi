@@ -72,7 +72,7 @@ export async function aoPedido(loja: LojaId, p: Pedido) {
   const base = Date.now();
   for (let i = 0; i < config.passos.length; i++) { const passo = config.passos[i];
     await enfileirar(contato, passo.assunto, passo.conteudo, {
-      loja, automacao: `poscompra:${i}`, referencia: ref, agendadoPara: new Date(base + passo.esperaHoras * 3600_000),
+      loja, contaId: config.contaId, automacao: `poscompra:${i}`, referencia: ref, agendadoPara: new Date(base + passo.esperaHoras * 3600_000),
       extra: { pedido: p.name ?? String(p.id ?? "") },
     });
   }
@@ -98,7 +98,7 @@ async function rodarCarrinho(loja: LojaId) {
     const inicio = c.updatedAt.getTime();
     for (let i = 0; i < config.passos.length; i++) { const passo = config.passos[i];
       await enfileirar(contato, passo.assunto, passo.conteudo, {
-        loja, automacao: `carrinho:${i}`, referencia: `checkout:${c.id}`,
+        loja, contaId: config.contaId, automacao: `carrinho:${i}`, referencia: `checkout:${c.id}`,
         agendadoPara: new Date(Math.max(Date.now(), inicio + passo.esperaHoras * 3600_000)),
         extra: { link_carrinho: c.url },
       });
@@ -126,7 +126,7 @@ async function rodarReativacao(loja: LojaId) {
   for (const c of candidatos) {
     for (let i = 0; i < config.passos.length; i++) { const passo = config.passos[i];
       await enfileirar(c, passo.assunto, passo.conteudo, {
-        loja, automacao: `reativacao:${i}`, agendadoPara: new Date(Date.now() + passo.esperaHoras * 3600_000),
+        loja, contaId: config.contaId, automacao: `reativacao:${i}`, agendadoPara: new Date(Date.now() + passo.esperaHoras * 3600_000),
       });
     }
   }
@@ -141,7 +141,7 @@ export async function dispararCampanha(id: string) {
   const lista = await db.select().from(schema.contatos).where(filtroSegmento({ ...(camp.segmento as Segmento), loja: camp.loja as LojaId }));
   let n = 0;
   for (const c of lista) {
-    if (await enfileirar(c, camp.assunto, camp.conteudo as never, { loja: camp.loja as LojaId, campanhaId: camp.id })) n++;
+    if (await enfileirar(c, camp.assunto, camp.conteudo as never, { loja: camp.loja as LojaId, campanhaId: camp.id, contaId: camp.contaId })) n++;
   }
   await db.update(C).set({ totalDestinatarios: n, ...(n === 0 ? { status: "enviada", enviadaEm: new Date() } : {}) }).where(eq(C.id, id));
   return n;

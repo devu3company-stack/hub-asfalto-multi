@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const ABAS = [["/email", "Campanhas"], ["/email/automacoes", "Automações"], ["/email/contatos", "Contatos"]] as const;
+const ABAS = [["/email", "Campanhas"], ["/email/automacoes", "Automações"], ["/email/contatos", "Contatos"], ["/email/contas", "Contas de envio"]] as const;
 
 export default function Abas({ atual, loja }: { atual: string; loja: string }) {
   return (

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
-import { and, count, eq, gte, lte, sql } from "drizzle-orm";
+import { and, count, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
 import nodemailer from "nodemailer";
 import { createId } from "@paralleldrive/cuid2";
 import { db, schema } from "../db";
@@ -8,6 +8,7 @@ import { getConfig, type Config } from "../integrations/store";
 import { aplicarVariaveis, renderEmail, textoPuro, type EmailConteudo, type Marca, type Variaveis } from "./template";
 import { getSetting } from "../settings";
 import { chaveLoja, LOJAS, lojaValida, type LojaId } from "../lojas";
+import { listarContas, smtpDaConta } from "./contas";
 
 /** Nome, site e logo da loja usados nos e-mails (ajustáveis em Integrações › Lojas). */
 export async function marcaDa(loja: LojaId): Promise<Marca> {
@@ -58,7 +59,7 @@ function transporte(cfg: Config) {
   });
 }
 
-const remetente = (cfg: Config, marca: Marca) => ({ name: cfg.fromName || marca.nome, address: cfg.fromEmail || cfg.user });
+const remetente = (cfg: Config, marca: Marca, nome?: string | null) => ({ name: nome || cfg.fromName || marca.nome, address: cfg.fromEmail || cfg.user });
 
 export async function testarSmtp(cfg: Config) {
   if (!cfg.host || !cfg.user || !cfg.pass) throw new Error("Informe servidor, usuário e senha.");
@@ -96,6 +97,7 @@ export const podeReceber = (c: Pick<Contato, "descadastradoEm" | "bounce">) => !
 
 export async function enfileirar(contato: Contato, assunto: string, conteudo: EmailConteudo, opts: {
   loja: LojaId; campanhaId?: string; automacao?: string; referencia?: string; agendadoPara?: Date; extra?: Variaveis;
+  contaId?: string | null; remetenteNome?: string | null;
 }) {
   if (!podeReceber(contato)) return null;
   const id = createId();
@@ -103,7 +105,7 @@ export async function enfileirar(contato: Contato, assunto: string, conteudo: Em
   const { html } = montar(id, contato, conteudo, marca, opts.extra);
   const v = variaveisDo(contato, marca, opts.extra);
   await db.insert(E).values({
-    id, loja: opts.loja, contatoId: contato.id, campanhaId: opts.campanhaId ?? null, automacao: opts.automacao ?? null,
+    id, loja: opts.loja, contaId: opts.contaId || null, remetenteNome: opts.remetenteNome || null, contatoId: contato.id, campanhaId: opts.campanhaId ?? null, automacao: opts.automacao ?? null,
     referencia: opts.referencia ?? null, assunto: aplicarVariaveis(assunto, v), html,
     agendadoPara: opts.agendadoPara ?? new Date(),
   });
@@ -111,9 +113,9 @@ export async function enfileirar(contato: Contato, assunto: string, conteudo: Em
 }
 
 /** E-mail de teste (não entra na fila nem nas estatísticas). */
-export async function enviarTeste(loja: LojaId, para: string, assunto: string, conteudo: EmailConteudo) {
-  const cfg = await smtpDa(loja);
-  if (!cfg) throw new Error("Configure o servidor de e-mail (SMTP) em Integrações.");
+export async function enviarTeste(loja: LojaId, para: string, assunto: string, conteudo: EmailConteudo, contaId?: string | null) {
+  const cfg = contaId ? await smtpDaConta(contaId) : await smtpDa(loja);
+  if (!cfg) throw new Error(contaId ? "A conta de e-mail escolhida está desligada ou sem configuração." : "Configure o servidor de e-mail (SMTP) em Integrações ou cadastre uma conta em E-mail › Contas de envio.");
   const marca = await marcaDa(loja);
   const fake = { id: "teste", nome: "Cliente Teste", email: para, cidade: "Mogi Mirim" } as Contato;
   const { html, texto } = montar("teste", fake, conteudo, marca, { link_carrinho: marca.site, pedido: "#1001" });
@@ -132,6 +134,7 @@ export async function processarFila() {
   let total = 0;
   try {
     for (const l of LOJAS) total += await processarLoja(l.id);
+    for (const c of await listarContas(true)) total += await processarConta(c.id);
     // campanhas cujo último envio saiu viram "enviada"
     await db.execute(sql`update email_campanhas c set status = 'enviada', enviada_em = now()
       where c.status = 'enviando' and not exists (select 1 from email_envios e where e.campanha_id = c.id and e.status = 'fila')`);
@@ -146,34 +149,52 @@ async function enviadosDesde(cfg: Config, ms: number) {
   const lojas: string[] = [];
   for (const l of LOJAS) if ((await smtpDa(l.id))?.user === cfg.user) lojas.push(l.id);
   const [{ n }] = await db.select({ n: count() }).from(E)
-    .where(and(eq(E.status, "enviado"), gte(E.enviadoEm, new Date(Date.now() - ms)), sql`${E.loja} = any(${lojas})`));
+    .where(and(eq(E.status, "enviado"), gte(E.enviadoEm, new Date(Date.now() - ms)), isNull(E.contaId), sql`${E.loja} = any(${lojas})`));
+  return n;
+}
+
+async function enviadosDaConta(contaId: string, ms: number) {
+  const [{ n }] = await db.select({ n: count() }).from(E).where(and(eq(E.status, "enviado"), eq(E.contaId, contaId), gte(E.enviadoEm, new Date(Date.now() - ms))));
   return n;
 }
 
 async function processarLoja(loja: LojaId) {
   const cfg = await smtpDa(loja);
   if (!cfg) return 0;
-  const marca = await marcaDa(loja);
   const { porHora, porDia } = limites(cfg);
   const vagas = Math.min(porHora - (await enviadosDesde(cfg, 3600_000)), porDia - (await enviadosDesde(cfg, 86400_000)), 30);
-  if (vagas <= 0) return 0;
+  return enviarLote(cfg, vagas, and(eq(E.loja, loja), isNull(E.contaId))!);
+}
 
+async function processarConta(contaId: string) {
+  const cfg = await smtpDaConta(contaId);
+  if (!cfg) return 0;
+  const { porHora, porDia } = limites(cfg);
+  const vagas = Math.min(porHora - (await enviadosDaConta(contaId, 3600_000)), porDia - (await enviadosDaConta(contaId, 86400_000)), 30);
+  return enviarLote(cfg, vagas, eq(E.contaId, contaId));
+}
+
+async function enviarLote(cfg: Config, vagas: number, filtro: SQL) {
+  if (vagas <= 0) return 0;
   const lote = await db.query.emailEnvios.findMany({
-    where: and(eq(E.status, "fila"), eq(E.loja, loja), lte(E.agendadoPara, new Date())),
+    where: and(eq(E.status, "fila"), filtro, lte(E.agendadoPara, new Date())),
     orderBy: (t, { asc }) => [asc(t.agendadoPara)],
     limit: vagas,
     with: { contato: true },
   });
   const tr = transporte(cfg);
+  const marcas = new Map<string, Marca>();
   let enviados = 0;
   for (const e of lote) {
     if (!podeReceber(e.contato)) {
       await db.update(E).set({ status: "cancelado", erro: "Contato descadastrado ou e-mail inválido" }).where(eq(E.id, e.id));
       continue;
     }
+    const loja = lojaValida(e.loja);
+    if (!marcas.has(loja)) marcas.set(loja, await marcaDa(loja));
     try {
       await tr.sendMail({
-        from: remetente(cfg, marca), to: e.contato.nome ? { name: e.contato.nome, address: e.contato.email } : e.contato.email,
+        from: remetente(cfg, marcas.get(loja)!, e.remetenteNome), to: e.contato.nome ? { name: e.contato.nome, address: e.contato.email } : e.contato.email,
         replyTo: cfg.replyTo || undefined, subject: e.assunto, html: e.html,
         text: e.html.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
         headers: {

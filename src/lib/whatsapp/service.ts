@@ -130,7 +130,12 @@ export async function handleIncoming(m: Incoming) {
   await avisarForaDoExpediente(m.conexaoId, m.chat, cx.iaLigada).catch((e) => console.error("expediente:", e instanceof Error ? e.message : e));
 
   // IA e automações só respondem nos números em que foram ligadas.
-  if (!cx.iaLigada) return;
+  if (!cx.iaLigada) {
+    // IA desligada neste número: só rodam as automações que escolheram este número de propósito.
+    await disparar("whatsapp.mensagem", { chat: m.chat, telefone: m.chat, conexao: m.conexaoId, vendedorId: cx.userId, nome: m.name ?? null, texto: m.text }, inserted[0].id, { soDoNumero: true })
+      .catch((e) => console.error("automação:", e instanceof Error ? e.message : e));
+    return;
+  }
 
   // Automações por palavra-chave respondem primeiro; se alguma pegou a mensagem, a IA não responde em cima.
   const pegou = await disparar("whatsapp.mensagem", { chat: m.chat, telefone: m.chat, conexao: m.conexaoId, vendedorId: cx.userId, nome: m.name ?? null, texto: m.text }, inserted[0].id)
