@@ -6,7 +6,7 @@ import { can } from "@/lib/permissions";
 import { parametros } from "@/lib/frete/historico";
 import { PageHeader, Stat, brl } from "@/components/ui";
 import ActionForm from "@/components/ActionForm";
-import { importar, salvarParams } from "./actions";
+import { salvarParams } from "./actions";
 
 export const dynamic = "force-dynamic";
 const H = schema.freteHistorico;
@@ -37,10 +37,8 @@ export default async function HistoricoFretes({ searchParams }: { searchParams: 
         <div className="grid lg:grid-cols-2 gap-4">
           <section className="card flex flex-col gap-3">
             <h2 className="font-display font-bold text-lg">Importar planilha</h2>
-            <p className="text-sm text-graphite">Use a planilha &quot;Histórico de Preços Fretes&quot; (.xlsx ou .xlsm). Os fretes que vieram de planilha são substituídos; os registrados pelo app de entregas ficam.</p>
-            <ActionForm action={importar} label="Importar" busy="Importando..." reset>
-              <input type="file" name="arquivo" accept=".xlsx,.xlsm" required aria-label="Planilha de histórico" className="text-sm" />
-            </ActionForm>
+            <p className="text-sm text-graphite">A importação da planilha &quot;Histórico de Preços Fretes&quot; agora fica em Cadastros, junto com as transportadoras e os entregadores.</p>
+            <Link href="/fretes/planilhas" className="btn-primary self-start">Abrir Cadastros → Planilhas</Link>
           </section>
           <section className="card flex flex-col gap-3">
             <h2 className="font-display font-bold text-lg">O que conta como &quot;frete parecido&quot;</h2>

@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions";
 import { VEICULOS } from "@/lib/frete/historico";
 import { PageHeader, Badge } from "@/components/ui";
 import ActionForm from "@/components/ActionForm";
+import CadastrosTabs from "@/components/CadastrosTabs";
 import { alternarAtivo, salvarEntregador, trocarSenha } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -43,9 +44,10 @@ export default async function Entregadores() {
   const lista = await db.query.entregadores.findMany({ orderBy: [asc(schema.entregadores.nome)] });
   return (
     <>
-      <PageHeader title="Entregadores" subtitle="Cadastro dos entregadores externos. Eles entram no app com o WhatsApp e uma senha de 6 números.">
-        <Link href="/entregas" className="btn-outline h-9 px-4">Voltar às entregas</Link>
+      <PageHeader title="Cadastros de logística" subtitle="Entregadores externos: eles entram no app com o WhatsApp e uma senha de 6 números.">
+        <Link href="/entregas" className="btn-outline h-9 px-4">Ir para entregas</Link>
       </PageHeader>
+      <CadastrosTabs atual="entregadores" role={user.role} />
       {editor && (
         <section className="card flex flex-col gap-3">
           <h2 className="font-display font-bold text-lg">Novo entregador</h2>

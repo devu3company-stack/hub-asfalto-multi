@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions";
 import { getSetting } from "@/lib/settings";
 import { PageHeader, Badge } from "@/components/ui";
 import ActionForm from "./ActionForm";
+import CadastrosTabs from "@/components/CadastrosTabs";
 import { criarTransportadora, salvarCepOrigem } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +25,10 @@ export default async function Transportadoras() {
 
   return (
     <>
-      <PageHeader title="Transportadoras e tabelas" subtitle="As tabelas de frete de cada transportadora. O hub calcula o frete com elas, sem depender de sistema pago.">
-        <Link href="/fretes" className="btn-outline h-9 px-4">Voltar para cotação</Link>
+      <PageHeader title="Cadastros de logística" subtitle="Transportadoras, entregadores e as planilhas de frete, tudo num lugar só. O hub calcula o frete com as tabelas das transportadoras.">
+        <Link href="/fretes" className="btn-outline h-9 px-4">Ir para cotação</Link>
       </PageHeader>
+      <CadastrosTabs atual="transportadoras" role={user.role} />
 
       <section className="card flex flex-col gap-3">
         <h2 className="font-display font-bold text-lg">Transportadoras</h2>

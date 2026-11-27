@@ -43,7 +43,7 @@ export default async function Fretes({ searchParams }: { searchParams: { loja?: 
           <Link href="/fretes/avaliar" className="btn-outline h-9 px-4">Avaliar frete</Link>
           <Link href="/fretes/historico" className="btn-outline h-9 px-4">Histórico</Link>
           <Link href={`/fretes/produtos?loja=${loja}`} className="btn-outline h-9 px-4">Produtos</Link>
-          <Link href="/fretes/transportadoras" className="btn-outline h-9 px-4">Transportadoras e tabelas</Link>
+          <Link href="/fretes/transportadoras" className="btn-outline h-9 px-4">Cadastros (transportadoras, entregadores, planilhas)</Link>
         </div>
       </PageHeader>
 

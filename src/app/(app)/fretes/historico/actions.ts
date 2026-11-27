@@ -19,6 +19,7 @@ export async function importar(_p: FormMsg, f: FormData): Promise<FormMsg> {
     const r = await importarHistorico(Buffer.from(await arq.arrayBuffer()));
     await audit(u.id, "fretes.historico.importar", `${r.importadas} linhas`);
     revalidatePath("/fretes/historico");
+    revalidatePath("/fretes/planilhas");
     return { ok: true, message: `${r.importadas} fretes importados da aba "${r.aba}"${r.ignoradas ? ` (${r.ignoradas} linha(s) incompletas ignoradas)` : ""}.` };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Não consegui ler a planilha." };

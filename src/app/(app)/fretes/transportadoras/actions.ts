@@ -24,6 +24,7 @@ const dec = (f: FormData, k: string, def = 0) => {
 function refresh(id?: string) {
   revalidatePath("/fretes");
   revalidatePath("/fretes/transportadoras");
+  revalidatePath("/fretes/planilhas");
   if (id) revalidatePath(`/fretes/transportadoras/${id}`);
 }
 

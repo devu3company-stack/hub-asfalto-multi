@@ -29,7 +29,7 @@ export default async function Entregas({ searchParams }: { searchParams: { aba?:
   return (
     <>
       <PageHeader title="Entregas" subtitle="Publique o frete, os entregadores recebem o aviso no WhatsApp e o primeiro que aceitar leva.">
-        <Link href="/entregas/entregadores" className="btn-outline h-9 px-4">Entregadores ({nEnt})</Link>
+        <Link href="/entregas/entregadores" className="btn-outline h-9 px-4">Cadastros · {nEnt} entregador(es)</Link>
       </PageHeader>
       {editor && (
         <details className="card" open={searchParams.novo === "1" || undefined}>
